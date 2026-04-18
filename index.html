@@ -10,25 +10,30 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./app.css?v=20260418e" />
+    <link rel="stylesheet" href="./app.css?v=20260418f" />
   </head>
   <body>
     <div class="page-shell">
       <header class="hero">
         <h1>Power Pulse</h1>
         <p class="hero-copy">
-          Power generation from Ember's Monthly Electricity Data API since
-          January 2020. Checks for updates daily.
+          Monthly power generation and power sector emissions from Ember's
+          Monthly Electricity Data API since January 2020. Checks for updates
+          daily.
         </p>
       </header>
 
       <main class="grid">
         <section class="panel panel-wide">
           <div class="panel-heading">
-            <h2>Power Generation Time Series</h2>
+            <h2>Monthly Time Series</h2>
           </div>
           <div class="series-toolbar">
             <div class="series-controls">
+              <label class="series-control" for="series-metric">
+                <span>Metric</span>
+                <select id="series-metric"></select>
+              </label>
               <label class="series-control" for="series-market">
                 <span>Country/Region</span>
                 <select id="series-market"></select>
@@ -44,7 +49,7 @@
             </div>
           </div>
           <div class="chart-card">
-            <svg id="series-chart" viewBox="0 0 960 320" class="series-chart" role="img" aria-label="Power generation time series"></svg>
+            <svg id="series-chart" viewBox="0 0 960 320" class="series-chart" role="img" aria-label="Monthly Ember time series"></svg>
             <div id="series-tooltip" class="series-tooltip" hidden></div>
           </div>
         </section>
@@ -52,11 +57,11 @@
         <section class="panel panel-wide">
           <div class="panel-heading">
             <h2>Latest Ember Month</h2>
-            <p>The latest available monthly Ember power generation record for each country and region in the selected fuel series.</p>
+            <p>The latest available monthly Ember record for each country and region in the selected metric and fuel series.</p>
           </div>
           <div class="weekly-meta">
             <div id="snapshot-generated-at" class="meta-chip">Monthly export not loaded</div>
-            <div class="meta-chip">Source: <code>data/ember-monthly-series.json</code></div>
+            <div class="meta-chip">Sources: <code>data/ember-monthly-series.json</code> and <code>data/ember-monthly-emissions-series.json</code></div>
           </div>
           <div class="table-wrap">
             <table>
@@ -65,7 +70,7 @@
                   <th>Country/Region</th>
                   <th>Fuel Type</th>
                   <th>Month</th>
-                  <th>Power Generation (TWh)</th>
+                  <th>Value</th>
                   <th>Share</th>
                   <th>Observed At</th>
                   <th>Source</th>
@@ -79,7 +84,7 @@
         <section class="panel panel-wide">
           <div class="panel-heading">
             <h2>Coverage</h2>
-            <p>Every country and region returned by Ember's monthly electricity dataset for the selected fuels from 2020 onward.</p>
+            <p>Every country and region returned by Ember's monthly electricity generation and power sector emissions datasets from 2020 onward.</p>
           </div>
           <div class="weekly-meta">
             <div id="coverage-generated-at" class="meta-chip">Loading Ember coverage</div>
@@ -96,6 +101,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260418e"></script>
+    <script type="module" src="./app.js?v=20260418f"></script>
   </body>
 </html>
