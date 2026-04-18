@@ -1,8 +1,8 @@
 # Coal Power Pulse
 
-This project is now an Ember-only monthly coal generation dashboard.
+This project is a coal generation dashboard from Ember's Monthly Electricity Data.
 
-It now pulls every country and region returned by Ember's monthly coal generation dataset for `2025-01` through the latest available month.
+It displays every country and region returned by Ember's monthly coal generation dataset for `2025-01` through the latest available month.
 
 ## Core files
 
@@ -16,7 +16,7 @@ It now pulls every country and region returned by Ember's monthly coal generatio
 
 ## Refresh the data
 
-The dashboard reads `EMBER_API_KEY` from `.env` and fetches the official monthly Ember `Coal` series from `2025-01` through the latest available month, with no hard-coded market list.
+The dashboard fetches the official monthly Ember `Coal` series from `2025-01` through the latest available month, and checks for updates daily.
 
 ```bash
 cd /Users/christines/Desktop/Workspace/Coal-Power-Pulse
