@@ -1,0 +1,6 @@
+.DS_Store
+.env
+Untitled.rtf
+data/coal-history.sqlite
+data/coal-history.sqlite-shm
+data/coal-history.sqlite-wal

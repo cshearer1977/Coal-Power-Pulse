@@ -1,0 +1,32 @@
+[
+  {
+    "country": "Germany",
+    "inDomain": "",
+    "notes": "Fill with the ENTSO-E bidding zone or control area EIC code after token approval."
+  },
+  {
+    "country": "Poland",
+    "inDomain": "",
+    "notes": "Fill with the ENTSO-E bidding zone or control area EIC code after token approval."
+  },
+  {
+    "country": "Czechia",
+    "inDomain": "",
+    "notes": "Fill with the ENTSO-E bidding zone or control area EIC code after token approval."
+  },
+  {
+    "country": "Bulgaria",
+    "inDomain": "",
+    "notes": "Fill with the ENTSO-E bidding zone or control area EIC code after token approval."
+  },
+  {
+    "country": "Romania",
+    "inDomain": "",
+    "notes": "Fill with the ENTSO-E bidding zone or control area EIC code after token approval."
+  },
+  {
+    "country": "Greece",
+    "inDomain": "",
+    "notes": "Fill with the ENTSO-E bidding zone or control area EIC code after token approval."
+  }
+]

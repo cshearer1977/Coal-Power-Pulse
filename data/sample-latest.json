@@ -1,0 +1,36 @@
+{
+  "records": [
+    {
+      "market": "United States",
+      "observedAt": "2026-04-16T14:00:00Z",
+      "source": "EIA (placeholder)",
+      "coalGenerationMw": 13320,
+      "coalSharePct": 15.2,
+      "latencyLabel": "Target: hourly"
+    },
+    {
+      "market": "European Union",
+      "observedAt": "2026-04-16T14:00:00Z",
+      "source": "ENTSO-E (placeholder)",
+      "coalGenerationMw": 21480,
+      "coalSharePct": 12.8,
+      "latencyLabel": "Target: hourly"
+    },
+    {
+      "market": "India",
+      "observedAt": "2026-04-16T00:00:00Z",
+      "source": "CEA / NPP (placeholder)",
+      "coalGenerationMw": 112450,
+      "coalSharePct": 71.4,
+      "latencyLabel": "Target: intra-day"
+    },
+    {
+      "market": "South Africa",
+      "observedAt": "2026-04-16T00:00:00Z",
+      "source": "Eskom (placeholder)",
+      "coalGenerationMw": 24810,
+      "coalSharePct": 81.6,
+      "latencyLabel": "Target: daily"
+    }
+  ]
+}

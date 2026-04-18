@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-04-17T07:08:47.430Z",
+  "connector": "south-korea-epsis",
+  "requestBody": {
+    "beginDate": "202601",
+    "endDate": "202604",
+    "selYear": "N",
+    "selRegion": "1",
+    "locale": "eng"
+  },
+  "record": {
+    "market": "South Korea",
+    "regionType": "country",
+    "observedAt": "2026-02-28T23:59:59.000Z",
+    "fetchedAt": "2026-04-17T07:08:47.430Z",
+    "source": "KPX EPSIS",
+    "sourceUrl": "https://epsis.kpx.or.kr/epsisnew/selectEkmaGcpBft.ajax",
+    "coalGenerationMw": 41238.577000000005,
+    "coalGenerationMwh": 27712323.744000003,
+    "coalSharePct": 28.11271400391649,
+    "totalGenerationMw": 146690.13099999845,
+    "granularity": "monthly",
+    "latencyCategory": "delayed",
+    "fuelBucketSource": "Bituminous coal + Anthracite coal",
+    "notes": "Uses KPX EPSIS monthly Generation Output by Source for All Region. Coal combines Bituminous coal and Anthracite coal. GWh is estimated from the reported monthly average MW multiplied by hours in the month."
+  }
+}

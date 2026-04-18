@@ -1,0 +1,20 @@
+{
+  "projectName": "Coal Power Pulse",
+  "goal": "Track Ember monthly coal generation across the target markets in one consistent dashboard view starting in January 2025.",
+  "normalizedRecordSchema": {
+    "market": "string",
+    "regionType": "country | bloc",
+    "observedAt": "ISO-8601 UTC timestamp for the month-end observation",
+    "fetchedAt": "ISO-8601 UTC timestamp for the Ember ingestion run",
+    "source": "Ember API",
+    "sourceUrl": "Ember monthly electricity generation endpoint",
+    "coalGenerationMw": "number | null (same numeric value retained for backward compatibility)",
+    "coalGenerationMwh": "number | null",
+    "coalSharePct": "number | null",
+    "totalGenerationMw": "number | null",
+    "granularity": "monthly",
+    "latencyCategory": "delayed",
+    "fuelBucketSource": "Coal",
+    "notes": "Monthly Ember series used for cross-market comparison"
+  }
+}

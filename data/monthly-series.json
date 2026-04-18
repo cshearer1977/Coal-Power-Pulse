@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-04-17T23:05:46.863Z",
+  "period": "monthly",
+  "rows": [
+    {
+      "market": "United States",
+      "bucket_start": "2026-01-01",
+      "observed_at": "2026-01-31T23:59:59.000Z",
+      "coal_generation_mwh": 72503000,
+      "coal_share_pct": 18.147118231717847,
+      "total_generation_mwh": 399529000,
+      "source": "EIA Electric Power Monthly",
+      "connector": "us-eia-epm-monthly",
+      "is_proxy": 0
+    }
+  ]
+}

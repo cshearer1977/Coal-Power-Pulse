@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coal Power Pulse</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">Ember Monthly Coal Generation Dashboard</p>
+        <h1>Coal Power Pulse</h1>
+        <p class="hero-copy">
+          Coal power generation from Ember's Monthly Electricity Data API. Checks for
+          updates daily.
+        </p>
+      </header>
+
+      <main class="grid">
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <h2>Coal Generation Time Series</h2>
+          </div>
+          <div class="series-toolbar">
+            <div class="series-controls">
+              <label class="series-control" for="series-market">
+                <span>Country/Region</span>
+                <select id="series-market"></select>
+              </label>
+            </div>
+            <div class="series-toolbar-meta">
+              <div id="series-legend" class="series-legend" hidden></div>
+              <div id="series-summary" class="meta-chip" hidden></div>
+            </div>
+          </div>
+          <div class="chart-card">
+            <svg id="series-chart" viewBox="0 0 960 320" class="series-chart" role="img" aria-label="Coal generation time series"></svg>
+            <div id="series-tooltip" class="series-tooltip" hidden></div>
+          </div>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <h2>Latest Ember Month</h2>
+            <p>The latest available monthly Ember coal generation record for each market.</p>
+          </div>
+          <div class="weekly-meta">
+            <div id="snapshot-generated-at" class="meta-chip">Monthly export not loaded</div>
+            <div class="meta-chip">Source: <code>data/ember-monthly-series.json</code></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Country/Region</th>
+                  <th>Month</th>
+                  <th>Coal Generation (GWh)</th>
+                  <th>Share</th>
+                  <th>Observed At</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody id="snapshot-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <h2>Coverage</h2>
+            <p>Every country and region returned by Ember's monthly coal dataset for 2025-2026.</p>
+          </div>
+          <div class="weekly-meta">
+            <div id="coverage-generated-at" class="meta-chip">Loading Ember coverage</div>
+          </div>
+          <div id="coverage-grid" class="coverage-grid"></div>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <h2>Normalized Schema</h2>
+          </div>
+          <pre id="schema-preview" class="code-block"></pre>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-04-17T06:19:01.130Z",
+  "connector": "india-npp",
+  "requestUrl": "https://www.npp.gov.in/dashBoard/demandmet2chartdata?date=2026-04-17",
+  "record": {
+    "market": "India",
+    "regionType": "country",
+    "observedAt": "2026-04-17T06:15:33.000Z",
+    "fetchedAt": "2026-04-17T06:19:01.130Z",
+    "source": "National Power Portal (NPP)",
+    "sourceUrl": "https://www.npp.gov.in/dashBoard/demandmet2chartdata?date=YYYY-MM-DD",
+    "coalGenerationMw": 131207,
+    "coalGenerationMwh": 131207,
+    "coalSharePct": 92.33557122549226,
+    "totalGenerationMw": 142098,
+    "granularity": "near_real_time",
+    "latencyCategory": "live",
+    "fuelBucketSource": "THERMAL GENERATION",
+    "notes": "NPP real-time feed reports THERMAL GENERATION rather than coal-only generation. This connector uses THERMAL GENERATION as a coal-dominant proxy until a cleaner coal/lignite split is confirmed."
+  }
+}

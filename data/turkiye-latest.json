@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-04-17T06:18:58.593Z",
+  "connector": "turkiye-epias",
+  "requestBody": {
+    "startDate": "2026-04-17T06:18:58.593Z",
+    "endDate": "2026-04-17T07:18:58.593Z"
+  },
+  "record": {
+    "market": "Turkiye",
+    "regionType": "country",
+    "observedAt": "2026-04-17T07:00:00+03:00",
+    "fetchedAt": "2026-04-17T06:18:58.593Z",
+    "source": "EPİAŞ Transparency Platform",
+    "sourceUrl": "https://seffaflik.epias.com.tr/electricity-service/v1/generation/data/realtime-generation",
+    "coalGenerationMw": 4360.39,
+    "coalGenerationMwh": 4360.39,
+    "coalSharePct": 16.292544585642172,
+    "totalGenerationMw": 26763.1,
+    "granularity": "hourly",
+    "latencyCategory": "live",
+    "fuelBucketSource": "lignite + blackCoal + importCoal + asphaltiteCoal",
+    "notes": "Coal rollup includes lignite, black coal, imported coal, and asphaltite coal from EPİAŞ realtime generation data."
+  }
+}

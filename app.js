@@ -1,0 +1,426 @@
+const formatGwh = (value) =>
+  Number.isFinite(value)
+    ? new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(value)
+    : "—";
+
+const formatPct = (value) => (Number.isFinite(value) ? `${value.toFixed(1)}%` : "—");
+
+const formatTime = (value) =>
+  new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(new Date(value));
+
+const formatAxisGwh = (value) =>
+  Number.isFinite(value)
+    ? new Intl.NumberFormat("en-US", {
+        maximumFractionDigits: 0,
+      }).format(value)
+    : "—";
+
+const formatBucketLabel = (value) =>
+  new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T00:00:00Z`));
+
+const formatMonthRangeEnd = (value) => formatBucketLabel(value);
+const compareMarkets = (a, b) => {
+  if (a === "World" && b !== "World") {
+    return -1;
+  }
+
+  if (b === "World" && a !== "World") {
+    return 1;
+  }
+
+  return a.localeCompare(b);
+};
+
+const coverageGrid = document.querySelector("#coverage-grid");
+const schemaPreview = document.querySelector("#schema-preview");
+const snapshotBody = document.querySelector("#snapshot-body");
+const snapshotGeneratedAt = document.querySelector("#snapshot-generated-at");
+const coverageGeneratedAt = document.querySelector("#coverage-generated-at");
+const seriesMarket = document.querySelector("#series-market");
+const seriesLegend = document.querySelector("#series-legend");
+const seriesSummary = document.querySelector("#series-summary");
+const seriesChart = document.querySelector("#series-chart");
+const seriesTooltip = document.querySelector("#series-tooltip");
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const YEAR_COLORS = {
+  2025: "#355c9a",
+  2026: "#aa5f22",
+  2027: "#2c7a7b",
+  2028: "#8d5a97",
+};
+
+const createSvgNode = (tag, attributes = {}) => {
+  const node = document.createElementNS(SVG_NS, tag);
+  Object.entries(attributes).forEach(([key, value]) => {
+    node.setAttribute(key, String(value));
+  });
+  return node;
+};
+
+const hideSeriesTooltip = () => {
+  seriesTooltip.hidden = true;
+};
+
+const getYearColor = (year) => YEAR_COLORS[year] ?? "#6c6c6c";
+const getRowYear = (row) => new Date(`${row.bucket_start}T00:00:00Z`).getUTCFullYear();
+const getRowMonthIndex = (row) => new Date(`${row.bucket_start}T00:00:00Z`).getUTCMonth();
+
+const groupRowsByMarket = (rows) => {
+  const grouped = new Map();
+
+  rows.forEach((row) => {
+    if (!grouped.has(row.market)) {
+      grouped.set(row.market, []);
+    }
+
+    grouped.get(row.market).push(row);
+  });
+
+  grouped.forEach((marketRows) => {
+    marketRows.sort((a, b) => a.bucket_start.localeCompare(b.bucket_start));
+  });
+
+  return grouped;
+};
+
+const groupMonthlyRowsByYear = (rows) => {
+  const grouped = new Map();
+
+  rows.forEach((row) => {
+    const year = getRowYear(row);
+
+    if (!grouped.has(year)) {
+      grouped.set(year, []);
+    }
+
+    grouped.get(year).push(row);
+  });
+
+  grouped.forEach((yearRows) => {
+    yearRows.sort((a, b) => getRowMonthIndex(a) - getRowMonthIndex(b));
+  });
+
+  return grouped;
+};
+
+const latestRowsByMarket = (rows) => {
+  const byMarket = new Map();
+
+  rows.forEach((row) => {
+    const existing = byMarket.get(row.market);
+
+    if (!existing || new Date(row.observed_at).getTime() > new Date(existing.observed_at).getTime()) {
+      byMarket.set(row.market, row);
+    }
+  });
+
+  return Array.from(byMarket.values()).sort((a, b) => a.market.localeCompare(b.market));
+};
+
+const renderSeriesLegend = (items) => {
+  seriesLegend.replaceChildren();
+
+  items.forEach((item) => {
+    const legendItem = document.createElement("div");
+    legendItem.className = "legend-item";
+    legendItem.innerHTML = `
+      <span class="legend-swatch" style="color: ${item.color}"></span>
+      <span>${item.label}</span>
+    `;
+    seriesLegend.append(legendItem);
+  });
+
+  seriesLegend.hidden = items.length === 0;
+};
+
+const showSeriesTooltip = ({ row, valueGwh, x, y }) => {
+  const chartBounds = seriesChart.getBoundingClientRect();
+
+  seriesTooltip.innerHTML = `
+    <strong>${row.market}</strong>
+    <div>Month of ${formatBucketLabel(row.bucket_start)}</div>
+    <div>Coal generation: ${formatGwh(valueGwh)} GWh</div>
+    <div>Share: ${formatPct(row.coal_share_pct)}</div>
+    <div>Source: Ember API</div>
+  `;
+
+  seriesTooltip.style.left = `${(x / 960) * chartBounds.width + 12}px`;
+  seriesTooltip.style.top = `${(y / 320) * chartBounds.height + 12}px`;
+  seriesTooltip.hidden = false;
+};
+
+const renderLatestSnapshot = (payload) => {
+  if (!payload?.generatedAt || !Array.isArray(payload.rows)) {
+    snapshotGeneratedAt.textContent = "Monthly export unavailable";
+    return;
+  }
+
+  snapshotGeneratedAt.textContent = `Ember monthly export generated ${formatTime(payload.generatedAt)}`;
+
+  latestRowsByMarket(payload.rows).forEach((row) => {
+    const tableRow = document.createElement("tr");
+    tableRow.innerHTML = `
+      <td>${row.market}</td>
+      <td>${row.bucket_start.slice(0, 7)}</td>
+      <td>${formatGwh(row.coal_generation_mwh / 1000)}</td>
+      <td>${formatPct(row.coal_share_pct)}</td>
+      <td>${formatTime(row.observed_at)}</td>
+      <td>Ember API</td>
+    `;
+    snapshotBody.append(tableRow);
+  });
+};
+
+const renderCoverage = (payload) => {
+  const latestBucketByMarket = Array.isArray(payload?.rows)
+    ? payload.rows.reduce((map, row) => {
+        const existing = map.get(row.market) ?? "";
+        if (row.bucket_start > existing) {
+          map.set(row.market, row.bucket_start);
+        }
+        return map;
+      }, new Map())
+    : new Map();
+
+  if (coverageGeneratedAt) {
+    const count = Number(payload?.marketCount) || (Array.isArray(payload?.markets) ? payload.markets.length : 0);
+    coverageGeneratedAt.textContent = `Ember coverage: ${count} countries and regions`;
+  }
+
+  (payload?.markets ?? []).forEach((market) => {
+    const latestBucket = latestBucketByMarket.get(market.name) ?? "";
+    const latestLabel = latestBucket ? formatMonthRangeEnd(latestBucket) : "latest available month";
+    const article = document.createElement("article");
+    article.className = "coverage-card";
+    article.innerHTML = `
+      <div class="status-pill status-${market.statusClass}">${market.statusLabel}</div>
+      <h3>${market.name}</h3>
+      <div class="meta-line"><strong>Source:</strong> ${market.primarySource}</div>
+      <div class="meta-line"><strong>Coverage:</strong> Monthly series from January 2025 to ${latestLabel}</div>
+    `;
+    coverageGrid.append(article);
+  });
+};
+
+const renderSeriesChart = (rows) => {
+  seriesChart.replaceChildren();
+  hideSeriesTooltip();
+
+  if (!rows.length) {
+    renderSeriesLegend([]);
+    seriesSummary.hidden = true;
+    return;
+  }
+
+  const width = 960;
+  const height = 320;
+  const margin = { top: 20, right: 20, bottom: 48, left: 72 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+  const buckets = MONTH_LABELS.map((_, index) => index);
+  const bucketIndex = new Map(buckets.map((bucket, index) => [bucket, index]));
+  const values = rows.map((row) => row.coal_generation_mwh / 1000).filter((value) => Number.isFinite(value));
+
+  if (!values.length) {
+    renderSeriesLegend([]);
+    seriesSummary.hidden = true;
+    return;
+  }
+
+  const maxValue = Math.max(...values, 0);
+  const yMax = maxValue > 0 ? maxValue * 1.1 : 1;
+  const xStep = innerWidth / (buckets.length - 1);
+  const yTicks = 4;
+
+  const xForBucket = (bucket) => margin.left + xStep * bucketIndex.get(bucket);
+  const xForRow = (row) => xForBucket(getRowMonthIndex(row));
+  const yForValue = (value) => margin.top + innerHeight - (value / yMax) * innerHeight;
+
+  const plot = createSvgNode("g");
+  seriesChart.append(plot);
+
+  const axisLabel = createSvgNode("text", {
+    x: margin.left,
+    y: 12,
+    "text-anchor": "start",
+    fill: "#655d56",
+    "font-size": 12,
+    "font-family": "IBM Plex Mono, monospace",
+  });
+  axisLabel.textContent = "GWh";
+  plot.append(axisLabel);
+
+  for (let tick = 0; tick <= yTicks; tick += 1) {
+    const value = (yMax / yTicks) * tick;
+    const y = yForValue(value);
+    plot.append(
+      createSvgNode("line", {
+        x1: margin.left,
+        y1: y,
+        x2: width - margin.right,
+        y2: y,
+        stroke: "rgba(33, 28, 24, 0.10)",
+        "stroke-width": 1,
+      })
+    );
+
+    const label = createSvgNode("text", {
+      x: margin.left - 12,
+      y: y + 4,
+      "text-anchor": "end",
+      fill: "#655d56",
+      "font-size": 12,
+      "font-family": "IBM Plex Mono, monospace",
+    });
+    label.textContent = formatAxisGwh(value);
+    plot.append(label);
+  }
+
+  plot.append(
+    createSvgNode("line", {
+      x1: margin.left,
+      y1: height - margin.bottom,
+      x2: width - margin.right,
+      y2: height - margin.bottom,
+      stroke: "rgba(33, 28, 24, 0.24)",
+      "stroke-width": 1.5,
+    })
+  );
+
+  buckets.forEach((bucket) => {
+    const x = xForBucket(bucket);
+
+    plot.append(
+      createSvgNode("line", {
+        x1: x,
+        y1: height - margin.bottom,
+        x2: x,
+        y2: height - margin.bottom + 6,
+        stroke: "rgba(33, 28, 24, 0.24)",
+        "stroke-width": 1.5,
+      })
+    );
+
+    const label = createSvgNode("text", {
+      x,
+      y: height - margin.bottom + 24,
+      "text-anchor": "middle",
+      fill: "#655d56",
+      "font-size": 12,
+      "font-family": "IBM Plex Mono, monospace",
+    });
+    label.textContent = MONTH_LABELS[bucket];
+    plot.append(label);
+  });
+
+  const byYear = groupMonthlyRowsByYear(rows);
+  const legendItems = [];
+
+  Array.from(byYear.keys())
+    .sort((a, b) => a - b)
+    .forEach((year) => {
+      const yearRows = byYear.get(year);
+      const color = getYearColor(year);
+      const linePoints = yearRows.map((row) => `${xForRow(row)},${yForValue(row.coal_generation_mwh / 1000)}`).join(" ");
+
+      plot.append(
+        createSvgNode("polyline", {
+          points: linePoints,
+          fill: "none",
+          stroke: color,
+          "stroke-width": 4,
+          "stroke-linejoin": "round",
+          "stroke-linecap": "round",
+        })
+      );
+
+      yearRows.forEach((row) => {
+        const valueGwh = row.coal_generation_mwh / 1000;
+        const x = xForRow(row);
+        const y = yForValue(valueGwh);
+        const circle = createSvgNode("circle", {
+          cx: x,
+          cy: y,
+          r: 4.5,
+          fill: color,
+          stroke: "#fff",
+          "stroke-width": 2,
+          tabindex: 0,
+        });
+
+        const title = createSvgNode("title");
+        title.textContent = `${row.market}: ${formatGwh(valueGwh)} GWh in ${formatBucketLabel(row.bucket_start)}`;
+        circle.append(title);
+        circle.addEventListener("mouseenter", () => showSeriesTooltip({ row, valueGwh, x, y }));
+        circle.addEventListener("focus", () => showSeriesTooltip({ row, valueGwh, x, y }));
+        circle.addEventListener("mouseleave", hideSeriesTooltip);
+        circle.addEventListener("blur", hideSeriesTooltip);
+        plot.append(circle);
+      });
+
+      legendItems.push({ label: String(year), color });
+    });
+
+  renderSeriesLegend(legendItems);
+  seriesSummary.hidden = true;
+};
+
+const renderSeriesSelector = (payload) => {
+  const grouped = groupRowsByMarket(payload.rows ?? []);
+  const markets = Array.from(grouped.keys()).sort(compareMarkets);
+
+  if (!markets.length) {
+    seriesSummary.hidden = true;
+    return;
+  }
+
+  markets.forEach((market) => {
+    const option = document.createElement("option");
+    option.value = market;
+    option.textContent = market;
+    seriesMarket.append(option);
+  });
+
+  const initialMarket = markets.includes("United States") ? "United States" : markets[0];
+  seriesMarket.value = initialMarket;
+
+  const refreshSeries = () => {
+    renderSeriesChart(grouped.get(seriesMarket.value) ?? []);
+  };
+
+  refreshSeries();
+  seriesMarket.addEventListener("change", refreshSeries);
+};
+
+const load = async () => {
+  const [sourcesResponse, emberResponse] = await Promise.all([
+    fetch("./data/sources.json", { cache: "no-store" }),
+    fetch("./data/ember-monthly-series.json", { cache: "no-store" }),
+  ]);
+
+  const sources = await sourcesResponse.json();
+  const emberMonthly = await emberResponse.json();
+
+  schemaPreview.textContent = JSON.stringify(sources.normalizedRecordSchema, null, 2);
+  renderCoverage(emberMonthly);
+  renderLatestSnapshot(emberMonthly);
+  renderSeriesSelector(emberMonthly);
+};
+
+load().catch((error) => {
+  console.error(error);
+  schemaPreview.textContent = "Failed to load local Ember data files.";
+});

@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-04-17T06:17:55.639Z",
+  "connector": "brazil-ons",
+  "requestUrl": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/geracao_usina_2_ho/GERACAO_USINA-2_2026_04.csv",
+  "record": {
+    "market": "Brazil",
+    "regionType": "country",
+    "observedAt": "2026-04-16T09:00:00.000Z",
+    "fetchedAt": "2026-04-17T06:17:55.639Z",
+    "source": "ONS Dados Abertos",
+    "sourceUrl": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/geracao_usina_2_ho/GERACAO_USINA-2_YYYY_MM.csv",
+    "coalGenerationMw": 0,
+    "coalGenerationMwh": 0,
+    "coalSharePct": 0,
+    "totalGenerationMw": 20818.457,
+    "granularity": "hourly",
+    "latencyCategory": "near_live",
+    "fuelBucketSource": "Carvão",
+    "notes": "Uses ONS hourly plant-generation data and filters nom_tipocombustivel=Carvão. Coal share is computed against the total of all plant-generation rows at the latest available timestamp."
+  }
+}

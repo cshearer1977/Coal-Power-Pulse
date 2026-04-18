@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-04-17T06:17:55.640Z",
+  "connector": "us-eia",
+  "requestUrl": "https://api.eia.gov/v2/electricity/rto/fuel-type-data/data/?api_key={EIA_API_KEY}&frequency=hourly&data%5B0%5D=value&facets%5Brespondent%5D%5B%5D=US48&sort%5B0%5D%5Bcolumn%5D=period&sort%5B0%5D%5Bdirection%5D=desc&offset=0&length=100",
+  "record": {
+    "market": "United States",
+    "regionType": "country",
+    "observedAt": "2026-04-16T03:00Z",
+    "fetchedAt": "2026-04-17T06:17:55.640Z",
+    "source": "EIA",
+    "sourceUrl": "https://api.eia.gov/v2/electricity/rto/fuel-type-data/data/?api_key={EIA_API_KEY}&frequency=hourly&data%5B0%5D=value&facets%5Brespondent%5D%5B%5D=US48&sort%5B0%5D%5Bcolumn%5D=period&sort%5B0%5D%5Bdirection%5D=desc&offset=0&length=100",
+    "coalGenerationMw": 78124,
+    "coalGenerationMwh": 78124,
+    "coalSharePct": 16.088569092665168,
+    "totalGenerationMw": 485587,
+    "granularity": "hourly",
+    "latencyCategory": "near_live",
+    "fuelBucketSource": "COL",
+    "notes": "Uses EIA /electricity/rto/fuel-type-data for respondent US48. Values are reported as megawatthours for the hourly interval and are shown here as the dashboard's live coal signal."
+  }
+}
