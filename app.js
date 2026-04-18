@@ -48,6 +48,7 @@ const snapshotBody = document.querySelector("#snapshot-body");
 const snapshotGeneratedAt = document.querySelector("#snapshot-generated-at");
 const coverageGeneratedAt = document.querySelector("#coverage-generated-at");
 const seriesMarket = document.querySelector("#series-market");
+const seriesFuel = document.querySelector("#series-fuel");
 const seriesLegend = document.querySelector("#series-legend");
 const seriesSummary = document.querySelector("#series-summary");
 const seriesChart = document.querySelector("#series-chart");
@@ -55,6 +56,7 @@ const seriesTooltip = document.querySelector("#series-tooltip");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const FUEL_ORDER = ["Coal", "Gas", "Solar", "Wind", "Hydro", "Nuclear", "Total generation"];
 const YEAR_COLORS = {
   2025: "#355c9a",
   2026: "#aa5f22",
@@ -130,6 +132,9 @@ const latestRowsByMarket = (rows) => {
   return Array.from(byMarket.values()).sort((a, b) => a.market.localeCompare(b.market));
 };
 
+const latestRowsByMarketForFuel = (rows, fuelType) =>
+  latestRowsByMarket(rows.filter((row) => row.fuel_type === fuelType));
+
 const renderSeriesLegend = (items) => {
   seriesLegend.replaceChildren();
 
@@ -148,12 +153,14 @@ const renderSeriesLegend = (items) => {
 
 const showSeriesTooltip = ({ row, valueGwh, x, y }) => {
   const chartBounds = seriesChart.getBoundingClientRect();
+  const valueTwh = valueGwh / 1000;
 
   seriesTooltip.innerHTML = `
     <strong>${row.market}</strong>
+    <div>Fuel: ${row.fuel_type}</div>
     <div>Month of ${formatBucketLabel(row.bucket_start)}</div>
-    <div>Coal generation: ${formatGwh(valueGwh)} GWh</div>
-    <div>Share: ${formatPct(row.coal_share_pct)}</div>
+    <div>Power generation: ${formatGwh(valueTwh)} TWh</div>
+    <div>Share: ${formatPct(row.power_share_pct)}</div>
     <div>Source: Ember API</div>
   `;
 
@@ -162,21 +169,23 @@ const showSeriesTooltip = ({ row, valueGwh, x, y }) => {
   seriesTooltip.hidden = false;
 };
 
-const renderLatestSnapshot = (payload) => {
+const renderLatestSnapshot = (payload, fuelType) => {
   if (!payload?.generatedAt || !Array.isArray(payload.rows)) {
     snapshotGeneratedAt.textContent = "Monthly export unavailable";
     return;
   }
 
   snapshotGeneratedAt.textContent = `Ember monthly export generated ${formatTime(payload.generatedAt)}`;
+  snapshotBody.replaceChildren();
 
-  latestRowsByMarket(payload.rows).forEach((row) => {
+  latestRowsByMarketForFuel(payload.rows, fuelType).forEach((row) => {
     const tableRow = document.createElement("tr");
     tableRow.innerHTML = `
       <td>${row.market}</td>
+      <td>${row.fuel_type}</td>
       <td>${row.bucket_start.slice(0, 7)}</td>
-      <td>${formatGwh(row.coal_generation_mwh / 1000)}</td>
-      <td>${formatPct(row.coal_share_pct)}</td>
+      <td>${formatGwh(row.power_generation_twh)}</td>
+      <td>${formatPct(row.power_share_pct)}</td>
       <td>${formatTime(row.observed_at)}</td>
       <td>Ember API</td>
     `;
@@ -185,6 +194,8 @@ const renderLatestSnapshot = (payload) => {
 };
 
 const renderCoverage = (payload) => {
+  coverageGrid.replaceChildren();
+
   const latestBucketByMarket = Array.isArray(payload?.rows)
     ? payload.rows.reduce((map, row) => {
         const existing = map.get(row.market) ?? "";
@@ -232,7 +243,7 @@ const renderSeriesChart = (rows) => {
   const innerHeight = height - margin.top - margin.bottom;
   const buckets = MONTH_LABELS.map((_, index) => index);
   const bucketIndex = new Map(buckets.map((bucket, index) => [bucket, index]));
-  const values = rows.map((row) => row.coal_generation_mwh / 1000).filter((value) => Number.isFinite(value));
+  const values = rows.map((row) => row.power_generation_twh).filter((value) => Number.isFinite(value));
 
   if (!values.length) {
     renderSeriesLegend([]);
@@ -260,7 +271,7 @@ const renderSeriesChart = (rows) => {
     "font-size": 12,
     "font-family": "IBM Plex Mono, monospace",
   });
-  axisLabel.textContent = "GWh";
+  axisLabel.textContent = "TWh";
   plot.append(axisLabel);
 
   for (let tick = 0; tick <= yTicks; tick += 1) {
@@ -334,7 +345,7 @@ const renderSeriesChart = (rows) => {
     .forEach((year) => {
       const yearRows = byYear.get(year);
       const color = getYearColor(year);
-      const linePoints = yearRows.map((row) => `${xForRow(row)},${yForValue(row.coal_generation_mwh / 1000)}`).join(" ");
+      const linePoints = yearRows.map((row) => `${xForRow(row)},${yForValue(row.power_generation_twh)}`).join(" ");
 
       plot.append(
         createSvgNode("polyline", {
@@ -348,9 +359,9 @@ const renderSeriesChart = (rows) => {
       );
 
       yearRows.forEach((row) => {
-        const valueGwh = row.coal_generation_mwh / 1000;
+        const valueGwh = row.power_generation_twh * 1000;
         const x = xForRow(row);
-        const y = yForValue(valueGwh);
+        const y = yForValue(row.power_generation_twh);
         const circle = createSvgNode("circle", {
           cx: x,
           cy: y,
@@ -362,7 +373,9 @@ const renderSeriesChart = (rows) => {
         });
 
         const title = createSvgNode("title");
-        title.textContent = `${row.market}: ${formatGwh(valueGwh)} GWh in ${formatBucketLabel(row.bucket_start)}`;
+        title.textContent = `${row.market}: ${formatGwh(row.power_generation_twh)} TWh in ${formatBucketLabel(
+          row.bucket_start
+        )}`;
         circle.append(title);
         circle.addEventListener("mouseenter", () => showSeriesTooltip({ row, valueGwh, x, y }));
         circle.addEventListener("focus", () => showSeriesTooltip({ row, valueGwh, x, y }));
@@ -379,8 +392,15 @@ const renderSeriesChart = (rows) => {
 };
 
 const renderSeriesSelector = (payload) => {
-  const grouped = groupRowsByMarket(payload.rows ?? []);
-  const markets = Array.from(grouped.keys()).sort(compareMarkets);
+  seriesMarket.replaceChildren();
+  seriesFuel.replaceChildren();
+
+  const markets = Array.from(new Set((payload.rows ?? []).map((row) => row.market))).sort(compareMarkets);
+  const fuels = (payload.fuelTypes ?? []).slice().sort((a, b) => {
+    const ai = FUEL_ORDER.indexOf(a);
+    const bi = FUEL_ORDER.indexOf(b);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
+  });
 
   if (!markets.length) {
     seriesSummary.hidden = true;
@@ -394,19 +414,33 @@ const renderSeriesSelector = (payload) => {
     seriesMarket.append(option);
   });
 
+  fuels.forEach((fuel) => {
+    const option = document.createElement("option");
+    option.value = fuel;
+    option.textContent = fuel;
+    seriesFuel.append(option);
+  });
+
   const initialMarket = markets.includes("World")
     ? "World"
     : markets.includes("United States")
     ? "United States"
     : markets[0];
+  const initialFuel = fuels.includes("Coal") ? "Coal" : fuels[0];
   seriesMarket.value = initialMarket;
+  seriesFuel.value = initialFuel;
 
   const refreshSeries = () => {
-    renderSeriesChart(grouped.get(seriesMarket.value) ?? []);
+    const filteredRows = (payload.rows ?? []).filter(
+      (row) => row.market === seriesMarket.value && row.fuel_type === seriesFuel.value
+    );
+    renderSeriesChart(filteredRows);
+    renderLatestSnapshot(payload, seriesFuel.value);
   };
 
   refreshSeries();
   seriesMarket.addEventListener("change", refreshSeries);
+  seriesFuel.addEventListener("change", refreshSeries);
 };
 
 const load = async () => {
@@ -420,7 +454,7 @@ const load = async () => {
 
   schemaPreview.textContent = JSON.stringify(sources.normalizedRecordSchema, null, 2);
   renderCoverage(emberMonthly);
-  renderLatestSnapshot(emberMonthly);
+  renderLatestSnapshot(emberMonthly, "Coal");
   renderSeriesSelector(emberMonthly);
 };
 

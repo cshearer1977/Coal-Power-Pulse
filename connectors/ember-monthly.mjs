@@ -1,11 +1,21 @@
 const EMBER_ROUTE = "https://api.ember-energy.org/v1/electricity-generation/monthly";
 
+export const DEFAULT_FUEL_SERIES = [
+  "Coal",
+  "Gas",
+  "Solar",
+  "Wind",
+  "Hydro",
+  "Nuclear",
+  "Total generation",
+];
+
 const monthEndIso = (value) => {
   const [year, month] = value.slice(0, 10).split("-").map(Number);
   return new Date(Date.UTC(year, month, 0, 23, 59, 59)).toISOString();
 };
 
-const buildQuery = (apiKey, { startDate, endDate, series = "Coal" }) => {
+const buildQuery = (apiKey, { startDate, endDate, series }) => {
   const url = new URL(EMBER_ROUTE);
   url.searchParams.set("api_key", apiKey);
   url.searchParams.set("start_date", startDate);
@@ -14,27 +24,37 @@ const buildQuery = (apiKey, { startDate, endDate, series = "Coal" }) => {
   return url;
 };
 
-export const fetchEmberMonthlyCoalSeries = async (apiKey, fetchImpl = fetch, options = {}) => {
+export const fetchEmberMonthlySeries = async (apiKey, fetchImpl = fetch, options = {}) => {
   const {
     startDate = "2025-01",
     endDate = new Date().toISOString().slice(0, 7),
+    seriesList = DEFAULT_FUEL_SERIES,
   } = options;
 
-  const url = buildQuery(apiKey, { startDate, endDate });
-  const response = await fetchImpl(url);
+  const responses = await Promise.all(
+    seriesList.map(async (series) => {
+      const url = buildQuery(apiKey, { startDate, endDate, series });
+      const response = await fetchImpl(url);
 
-  if (!response.ok) {
-    throw new Error(`Ember request failed with ${response.status} ${response.statusText}`);
-  }
+      if (!response.ok) {
+        throw new Error(`Ember request failed for ${series} with ${response.status} ${response.statusText}`);
+      }
 
-  const payload = await response.json();
-  const rows = Array.isArray(payload?.data) ? payload.data : [];
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.data) ? payload.data : [];
+
+      return {
+        series,
+        url: url.toString(),
+        rows,
+      };
+    })
+  );
 
   return {
     startDate,
     endDate,
-    url: url.toString(),
-    rows,
+    responses,
   };
 };
 
@@ -46,7 +66,6 @@ export const summarizeEmberMarkets = (rows) =>
         name: market,
         primarySource: "Ember API",
         expectedCadence: "Monthly series from January 2025 onward",
-        coalMapping: "Coal monthly generation series",
         statusLabel: row.is_aggregate_entity ? "Region" : "Country",
         statusClass: "live",
         isAggregate: Boolean(row.is_aggregate_entity),
@@ -57,27 +76,28 @@ export const summarizeEmberMarkets = (rows) =>
     }, new Map()).values()
   ).sort((a, b) => a.name.localeCompare(b.name));
 
-export const normalizeEmberMonthlyCoalSeries = (rows, fetchedAt = new Date().toISOString(), sourceUrl) =>
-  rows.map((row) => {
-    const market = row.entity === "EU" ? "European Union" : row.entity;
-    const coalGenerationMwh = Number(row.generation_twh) * 1_000_000;
-    const share = Number(row.share_of_generation_pct);
-    const totalGenerationMwh = Number.isFinite(share) && share > 0 ? coalGenerationMwh / (share / 100) : null;
+export const normalizeEmberMonthlySeries = (responses, fetchedAt = new Date().toISOString()) =>
+  responses.flatMap(({ rows, url, series }) =>
+    rows.map((row) => {
+      const market = row.entity === "EU" ? "European Union" : row.entity;
+      const generationTwh = Number(row.generation_twh);
+      const sharePct = Number(row.share_of_generation_pct);
 
-    return {
-      market,
-      regionType: row.is_aggregate_entity ? "bloc" : "country",
-      observedAt: monthEndIso(row.date),
-      fetchedAt,
-      source: "Ember API",
-      sourceUrl,
-      coalGenerationMw: coalGenerationMwh,
-      coalGenerationMwh,
-      coalSharePct: share,
-      totalGenerationMw: totalGenerationMwh,
-      granularity: "monthly",
-      latencyCategory: "delayed",
-      fuelBucketSource: "Coal",
-      notes: "Uses Ember's official monthly electricity generation API for the coal series.",
-    };
-  });
+      return {
+        market,
+        fuelType: series,
+        regionType: row.is_aggregate_entity ? "bloc" : "country",
+        observedAt: monthEndIso(row.date),
+        fetchedAt,
+        source: "Ember API",
+        sourceUrl: url,
+        powerGenerationTwh: generationTwh,
+        powerGenerationMwh: Number.isFinite(generationTwh) ? generationTwh * 1_000_000 : null,
+        powerSharePct: Number.isFinite(sharePct) ? sharePct : null,
+        granularity: "monthly",
+        latencyCategory: "delayed",
+        seriesName: series,
+        notes: `Uses Ember's official monthly electricity generation API for the ${series} series.`,
+      };
+    })
+  );

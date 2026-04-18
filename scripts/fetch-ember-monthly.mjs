@@ -4,11 +4,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  fetchEmberMonthlyCoalSeries,
-  normalizeEmberMonthlyCoalSeries,
+  DEFAULT_FUEL_SERIES,
+  fetchEmberMonthlySeries,
+  normalizeEmberMonthlySeries,
   summarizeEmberMarkets,
 } from "../connectors/ember-monthly.mjs";
-import { persistSnapshot } from "../lib/sqlite-store.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -63,33 +63,44 @@ const redactApiKey = (url) => url.replace(apiKey, "{EMBER_API_KEY}");
 
 try {
   const fetchedAt = new Date().toISOString();
-  const { startDate, endDate, url, rows } = await fetchEmberMonthlyCoalSeries(apiKey);
-  const records = normalizeEmberMonthlyCoalSeries(rows, fetchedAt, redactApiKey(url)).map((record) => ({
+  const { startDate, endDate, responses } = await fetchEmberMonthlySeries(apiKey);
+  const records = normalizeEmberMonthlySeries(
+    responses.map((response) => ({
+      ...response,
+      url: redactApiKey(response.url),
+    })),
+    fetchedAt
+  ).map((record) => ({
     ...record,
     sourceUrl: redactApiKey(record.sourceUrl),
   }));
 
-  for (const record of records) {
-    await persistSnapshot({ connector: "ember-monthly", record });
-  }
-
   const monthlyRows = records
     .map((record) => ({
       market: record.market,
+      fuel_type: record.fuelType,
       bucket_start: `${record.observedAt.slice(0, 7)}-01`,
       observed_at: record.observedAt,
-      coal_generation_mwh: record.coalGenerationMwh,
-      coal_share_pct: record.coalSharePct,
-      total_generation_mwh: record.totalGenerationMw,
+      power_generation_twh: record.powerGenerationTwh,
+      power_generation_mwh: record.powerGenerationMwh,
+      power_share_pct: record.powerSharePct,
       source: record.source,
       source_family: "Ember",
       source_label: "Ember API",
       connector: "ember-monthly",
       is_proxy: false,
     }))
-    .sort((a, b) => a.market.localeCompare(b.market) || a.bucket_start.localeCompare(b.bucket_start));
+    .sort(
+      (a, b) =>
+        a.fuel_type.localeCompare(b.fuel_type) ||
+        a.market.localeCompare(b.market) ||
+        a.bucket_start.localeCompare(b.bucket_start)
+    );
 
-  const markets = summarizeEmberMarkets(rows);
+  const markets = summarizeEmberMarkets(records.map((record) => ({
+    entity: record.market === "European Union" ? "EU" : record.market,
+    is_aggregate_entity: record.regionType === "bloc",
+  })));
 
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(
@@ -101,6 +112,7 @@ try {
           startDate,
           endDate,
           marketCount: markets.length,
+          fuelTypes: DEFAULT_FUEL_SERIES,
           markets,
           rows: monthlyRows,
         },
