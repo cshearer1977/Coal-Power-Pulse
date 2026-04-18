@@ -70,7 +70,16 @@ const START_YEAR_LABEL = "January 2020";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const FUEL_ORDER = ["Coal", "Gas", "Solar", "Solar + Wind", "Wind", "Hydro", "Nuclear", "Total generation"];
-const YEAR_PALETTE = ["#355c9a", "#aa5f22", "#2c7a7b", "#8d5a97", "#6b8e23", "#c05621", "#2f855a", "#805ad5"];
+const YEAR_PALETTE = [
+  "#016b83",
+  "#fe4f2d",
+  "#4a57a8",
+  "#7f142a",
+  "#65bd8b",
+  "#0f8ca0",
+  "#c63f27",
+  "#5f6cbc",
+];
 let hiddenYears = new Set();
 
 const createSvgNode = (tag, attributes = {}) => {
