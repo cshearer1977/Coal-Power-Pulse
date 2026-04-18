@@ -88,6 +88,11 @@ const hideSeriesTooltip = () => {
 const getYearColor = (year) => YEAR_PALETTE[(Math.abs(Number(year) - 2020)) % YEAR_PALETTE.length] ?? "#6c6c6c";
 const getRowYear = (row) => new Date(`${row.bucket_start}T00:00:00Z`).getUTCFullYear();
 const getRowMonthIndex = (row) => new Date(`${row.bucket_start}T00:00:00Z`).getUTCMonth();
+const getDefaultHiddenYears = (rows) => {
+  const years = Array.from(new Set(rows.map((row) => getRowYear(row)))).sort((a, b) => a - b);
+  const visibleYears = new Set(years.slice(-2));
+  return new Set(years.filter((year) => !visibleYears.has(year)));
+};
 
 const groupMonthlyRowsByYear = (rows) => {
   const grouped = new Map();
@@ -454,10 +459,10 @@ const renderSeriesSelector = (payload) => {
   seriesFuel.value = initialFuel;
 
   const refreshSeries = () => {
-    hiddenYears = new Set();
     const filteredRows = (payload.rows ?? []).filter(
       (row) => row.market === seriesMarket.value && row.fuel_type === seriesFuel.value
     );
+    hiddenYears = getDefaultHiddenYears(filteredRows);
     renderSeriesChart(filteredRows);
     renderLatestSnapshot(payload, seriesFuel.value);
   };
