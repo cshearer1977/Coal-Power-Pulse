@@ -227,7 +227,7 @@ const renderSeriesChart = (rows) => {
 
   const width = 960;
   const height = 320;
-  const margin = { top: 20, right: 20, bottom: 48, left: 72 };
+  const margin = { top: 28, right: 20, bottom: 48, left: 96 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
   const buckets = MONTH_LABELS.map((_, index) => index);
@@ -253,9 +253,9 @@ const renderSeriesChart = (rows) => {
   seriesChart.append(plot);
 
   const axisLabel = createSvgNode("text", {
-    x: margin.left,
+    x: margin.left - 12,
     y: 12,
-    "text-anchor": "start",
+    "text-anchor": "end",
     fill: "#655d56",
     "font-size": 12,
     "font-family": "IBM Plex Mono, monospace",
