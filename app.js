@@ -1,4 +1,4 @@
-const formatGwh = (value) =>
+const formatNumber = (value) =>
   Number.isFinite(value)
     ? new Intl.NumberFormat("en-US", {
         minimumFractionDigits: 2,
@@ -15,7 +15,7 @@ const formatTime = (value) =>
     timeZone: "UTC",
   }).format(new Date(value));
 
-const formatAxisTwh = (value, yMax) => {
+const formatAxisValue = (value, yMax) => {
   if (!Number.isFinite(value)) {
     return "—";
   }
@@ -41,7 +41,6 @@ const formatBucketLabel = (value) =>
     timeZone: "UTC",
   }).format(new Date(`${value}T00:00:00Z`));
 
-const formatMonthRangeEnd = (value) => formatBucketLabel(value);
 const compareMarkets = (a, b) => {
   if (a === "World" && b !== "World") {
     return -1;
@@ -59,6 +58,7 @@ const schemaPreview = document.querySelector("#schema-preview");
 const snapshotBody = document.querySelector("#snapshot-body");
 const snapshotGeneratedAt = document.querySelector("#snapshot-generated-at");
 const coverageGeneratedAt = document.querySelector("#coverage-generated-at");
+const seriesMetric = document.querySelector("#series-metric");
 const seriesMarket = document.querySelector("#series-market");
 const seriesFuel = document.querySelector("#series-fuel");
 const seriesLegend = document.querySelector("#series-legend");
@@ -69,6 +69,7 @@ const START_YEAR_LABEL = "January 2020";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const METRIC_ORDER = ["generation", "emissions"];
 const FUEL_ORDER = ["Coal", "Gas", "Solar", "Solar + Wind", "Wind", "Hydro", "Nuclear", "Total generation"];
 const YEAR_PALETTE = [
   "#016b83",
@@ -80,6 +81,26 @@ const YEAR_PALETTE = [
   "#c63f27",
   "#5f6cbc",
 ];
+
+const METRIC_CONFIG = {
+  generation: {
+    label: "Power generation",
+    shortLabel: "Generation",
+    unit: "TWh",
+    valueKey: "power_generation_twh",
+    shareKey: "power_share_pct",
+    sourcePath: "data/ember-monthly-series.json",
+  },
+  emissions: {
+    label: "Power sector emissions",
+    shortLabel: "Emissions",
+    unit: "MtCO2",
+    valueKey: "power_sector_emissions_mtco2",
+    shareKey: "emissions_share_pct",
+    sourcePath: "data/ember-monthly-emissions-series.json",
+  },
+};
+
 let hiddenYears = new Set();
 
 const createSvgNode = (tag, attributes = {}) => {
@@ -97,6 +118,7 @@ const hideSeriesTooltip = () => {
 const getYearColor = (year) => YEAR_PALETTE[(Math.abs(Number(year) - 2020)) % YEAR_PALETTE.length] ?? "#6c6c6c";
 const getRowYear = (row) => new Date(`${row.bucket_start}T00:00:00Z`).getUTCFullYear();
 const getRowMonthIndex = (row) => new Date(`${row.bucket_start}T00:00:00Z`).getUTCMonth();
+
 const getDefaultHiddenYears = (rows) => {
   const years = Array.from(new Set(rows.map((row) => getRowYear(row)))).sort((a, b) => a - b);
   const visibleYears = new Set(years.slice(-2));
@@ -159,16 +181,15 @@ const renderSeriesLegend = (items, toggleYear) => {
   seriesLegend.hidden = items.length === 0;
 };
 
-const showSeriesTooltip = ({ row, valueGwh, x, y }) => {
+const showSeriesTooltip = ({ row, metric, x, y }) => {
   const chartBounds = seriesChart.getBoundingClientRect();
-  const valueTwh = valueGwh / 1000;
 
   seriesTooltip.innerHTML = `
     <strong>${row.market}</strong>
     <div>Fuel: ${row.fuel_type}</div>
     <div>Month of ${formatBucketLabel(row.bucket_start)}</div>
-    <div>Power generation: ${formatGwh(valueTwh)} TWh</div>
-    <div>Share: ${formatPct(row.power_share_pct)}</div>
+    <div>${metric.label}: ${formatNumber(row[metric.valueKey])} ${metric.unit}</div>
+    <div>Share: ${formatPct(row[metric.shareKey])}</div>
     <div>Source: Ember API</div>
   `;
 
@@ -177,7 +198,9 @@ const showSeriesTooltip = ({ row, valueGwh, x, y }) => {
   seriesTooltip.hidden = false;
 };
 
-const renderLatestSnapshot = (payload, fuelType) => {
+const renderLatestSnapshot = (payload, metricKey, fuelType) => {
+  const metric = METRIC_CONFIG[metricKey];
+
   if (!payload?.generatedAt || !Array.isArray(payload.rows)) {
     snapshotGeneratedAt.textContent = "Monthly export unavailable";
     return;
@@ -192,8 +215,8 @@ const renderLatestSnapshot = (payload, fuelType) => {
       <td>${row.market}</td>
       <td>${row.fuel_type}</td>
       <td>${row.bucket_start.slice(0, 7)}</td>
-      <td>${formatGwh(row.power_generation_twh)}</td>
-      <td>${formatPct(row.power_share_pct)}</td>
+      <td>${formatNumber(row[metric.valueKey])}</td>
+      <td>${formatPct(row[metric.shareKey])}</td>
       <td>${formatTime(row.observed_at)}</td>
       <td>Ember API</td>
     `;
@@ -221,7 +244,7 @@ const renderCoverage = (payload) => {
 
   (payload?.markets ?? []).forEach((market) => {
     const latestBucket = latestBucketByMarket.get(market.name) ?? "";
-    const latestLabel = latestBucket ? formatMonthRangeEnd(latestBucket) : "latest available month";
+    const latestLabel = latestBucket ? formatBucketLabel(latestBucket) : "latest available month";
     const article = document.createElement("article");
     article.className = "coverage-card";
     article.innerHTML = `
@@ -234,12 +257,14 @@ const renderCoverage = (payload) => {
   });
 };
 
-const renderSeriesChart = (rows) => {
+const renderSeriesChart = (rows, metricKey) => {
+  const metric = METRIC_CONFIG[metricKey];
+
   seriesChart.replaceChildren();
   hideSeriesTooltip();
 
   if (!rows.length) {
-    renderSeriesLegend([]);
+    renderSeriesLegend([], () => {});
     seriesSummary.hidden = true;
     return;
   }
@@ -254,23 +279,25 @@ const renderSeriesChart = (rows) => {
   const byYear = groupMonthlyRowsByYear(rows);
   const visibleYears = Array.from(byYear.keys()).filter((year) => !hiddenYears.has(year));
   const visibleRows = rows.filter((row) => visibleYears.includes(getRowYear(row)));
-  const values = visibleRows.map((row) => row.power_generation_twh).filter((value) => Number.isFinite(value));
+  const values = visibleRows.map((row) => row[metric.valueKey]).filter((value) => Number.isFinite(value));
+
+  const toggleYear = (label) => {
+    const year = Number(label);
+    if (hiddenYears.has(year)) {
+      hiddenYears.delete(year);
+    } else {
+      hiddenYears.add(year);
+    }
+
+    renderSeriesChart(rows, metricKey);
+  };
 
   if (!values.length) {
     const legendItems = Array.from(byYear.keys())
       .sort((a, b) => a - b)
       .map((year) => ({ label: String(year), color: getYearColor(year), hidden: hiddenYears.has(year) }));
 
-    renderSeriesLegend(legendItems, (label) => {
-      const year = Number(label);
-      if (hiddenYears.has(year)) {
-        hiddenYears.delete(year);
-      } else {
-        hiddenYears.add(year);
-      }
-
-      renderSeriesChart(rows);
-    });
+    renderSeriesLegend(legendItems, toggleYear);
     seriesSummary.hidden = true;
     return;
   }
@@ -295,7 +322,7 @@ const renderSeriesChart = (rows) => {
     "font-size": 12,
     "font-family": "IBM Plex Mono, monospace",
   });
-  axisLabel.textContent = "TWh";
+  axisLabel.textContent = metric.unit;
   plot.append(axisLabel);
 
   for (let tick = 0; tick <= yTicks; tick += 1) {
@@ -320,7 +347,7 @@ const renderSeriesChart = (rows) => {
       "font-size": 12,
       "font-family": "IBM Plex Mono, monospace",
     });
-    label.textContent = formatAxisTwh(value, yMax);
+    label.textContent = formatAxisValue(value, yMax);
     plot.append(label);
   }
 
@@ -375,7 +402,7 @@ const renderSeriesChart = (rows) => {
         return;
       }
 
-      const linePoints = yearRows.map((row) => `${xForRow(row)},${yForValue(row.power_generation_twh)}`).join(" ");
+      const linePoints = yearRows.map((row) => `${xForRow(row)},${yForValue(row[metric.valueKey])}`).join(" ");
 
       plot.append(
         createSvgNode("polyline", {
@@ -389,9 +416,8 @@ const renderSeriesChart = (rows) => {
       );
 
       yearRows.forEach((row) => {
-        const valueGwh = row.power_generation_twh * 1000;
         const x = xForRow(row);
-        const y = yForValue(row.power_generation_twh);
+        const y = yForValue(row[metric.valueKey]);
         const circle = createSvgNode("circle", {
           cx: x,
           cy: y,
@@ -403,37 +429,31 @@ const renderSeriesChart = (rows) => {
         });
 
         const title = createSvgNode("title");
-        title.textContent = `${row.market}: ${formatGwh(row.power_generation_twh)} TWh in ${formatBucketLabel(
+        title.textContent = `${row.market}: ${formatNumber(row[metric.valueKey])} ${metric.unit} in ${formatBucketLabel(
           row.bucket_start
         )}`;
         circle.append(title);
-        circle.addEventListener("mouseenter", () => showSeriesTooltip({ row, valueGwh, x, y }));
-        circle.addEventListener("focus", () => showSeriesTooltip({ row, valueGwh, x, y }));
+        circle.addEventListener("mouseenter", () => showSeriesTooltip({ row, metric, x, y }));
+        circle.addEventListener("focus", () => showSeriesTooltip({ row, metric, x, y }));
         circle.addEventListener("mouseleave", hideSeriesTooltip);
         circle.addEventListener("blur", hideSeriesTooltip);
         plot.append(circle);
       });
     });
 
-  renderSeriesLegend(legendItems, (label) => {
-    const year = Number(label);
-    if (hiddenYears.has(year)) {
-      hiddenYears.delete(year);
-    } else {
-      hiddenYears.add(year);
-    }
-
-    renderSeriesChart(rows);
-  });
+  renderSeriesLegend(legendItems, toggleYear);
   seriesSummary.hidden = true;
 };
 
-const renderSeriesSelector = (payload) => {
+const renderSeriesControls = (datasets) => {
+  const generationPayload = datasets.generation;
+
+  seriesMetric.replaceChildren();
   seriesMarket.replaceChildren();
   seriesFuel.replaceChildren();
 
-  const markets = Array.from(new Set((payload.rows ?? []).map((row) => row.market))).sort(compareMarkets);
-  const fuels = (payload.fuelTypes ?? []).slice().sort((a, b) => {
+  const markets = Array.from(new Set((generationPayload.rows ?? []).map((row) => row.market))).sort(compareMarkets);
+  const fuels = (generationPayload.fuelTypes ?? []).slice().sort((a, b) => {
     const ai = FUEL_ORDER.indexOf(a);
     const bi = FUEL_ORDER.indexOf(b);
     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
@@ -443,6 +463,13 @@ const renderSeriesSelector = (payload) => {
     seriesSummary.hidden = true;
     return;
   }
+
+  METRIC_ORDER.forEach((metricKey) => {
+    const option = document.createElement("option");
+    option.value = metricKey;
+    option.textContent = METRIC_CONFIG[metricKey].shortLabel;
+    seriesMetric.append(option);
+  });
 
   markets.forEach((market) => {
     const option = document.createElement("option");
@@ -458,42 +485,50 @@ const renderSeriesSelector = (payload) => {
     seriesFuel.append(option);
   });
 
-  const initialMarket = markets.includes("World")
+  seriesMetric.value = "generation";
+  seriesMarket.value = markets.includes("World")
     ? "World"
     : markets.includes("United States")
     ? "United States"
     : markets[0];
-  const initialFuel = fuels.includes("Coal") ? "Coal" : fuels[0];
-  seriesMarket.value = initialMarket;
-  seriesFuel.value = initialFuel;
+  seriesFuel.value = fuels.includes("Coal") ? "Coal" : fuels[0];
 
   const refreshSeries = () => {
-    const filteredRows = (payload.rows ?? []).filter(
+    const activePayload = datasets[seriesMetric.value];
+    const filteredRows = (activePayload.rows ?? []).filter(
       (row) => row.market === seriesMarket.value && row.fuel_type === seriesFuel.value
     );
+
     hiddenYears = getDefaultHiddenYears(filteredRows);
-    renderSeriesChart(filteredRows);
-    renderLatestSnapshot(payload, seriesFuel.value);
+    renderSeriesChart(filteredRows, seriesMetric.value);
+    renderLatestSnapshot(activePayload, seriesMetric.value, seriesFuel.value);
+    renderCoverage(activePayload);
   };
 
   refreshSeries();
+  seriesMetric.addEventListener("change", refreshSeries);
   seriesMarket.addEventListener("change", refreshSeries);
   seriesFuel.addEventListener("change", refreshSeries);
 };
 
 const load = async () => {
-  const [sourcesResponse, emberResponse] = await Promise.all([
+  const [sourcesResponse, generationResponse, emissionsResponse] = await Promise.all([
     fetch("./data/sources.json", { cache: "no-store" }),
     fetch("./data/ember-monthly-series.json", { cache: "no-store" }),
+    fetch("./data/ember-monthly-emissions-series.json", { cache: "no-store" }),
   ]);
 
   const sources = await sourcesResponse.json();
-  const emberMonthly = await emberResponse.json();
+  const generationMonthly = await generationResponse.json();
+  const emissionsMonthly = await emissionsResponse.json();
 
   schemaPreview.textContent = JSON.stringify(sources.normalizedRecordSchema, null, 2);
-  renderCoverage(emberMonthly);
-  renderLatestSnapshot(emberMonthly, "Coal");
-  renderSeriesSelector(emberMonthly);
+  renderCoverage(generationMonthly);
+  renderLatestSnapshot(generationMonthly, "generation", "Coal");
+  renderSeriesControls({
+    generation: generationMonthly,
+    emissions: emissionsMonthly,
+  });
 };
 
 load().catch((error) => {

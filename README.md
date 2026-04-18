@@ -1,6 +1,6 @@
 # Power Pulse
 
-This project is a power generation dashboard from Ember's Monthly Electricity Data API.
+This project is a dashboard for power generation and power sector emissions from Ember's Monthly Electricity Data API.
 
 It displays every country and region returned by Ember's monthly electricity generation dataset for `2020-01` through the latest available month, across:
 
@@ -21,15 +21,16 @@ Live dashboard:
 
 - `index.html`: dashboard shell
 - `app.css`: dashboard styling
-- `app.js`: renders monthly Ember coverage, latest month, and the year-over-year chart
-- `connectors/ember-monthly.mjs`: Ember monthly API query and normalization logic
-- `scripts/fetch-ember-monthly.mjs`: refreshes `data/ember-monthly-series.json`
+- `app.js`: renders monthly Ember coverage, latest month, and the year-over-year chart for both metrics
+- `connectors/ember-monthly.mjs`: Ember monthly API query and normalization logic for generation and emissions
+- `scripts/fetch-ember-monthly.mjs`: refreshes both Ember monthly dataset files
 - `data/ember-monthly-series.json`: monthly Ember power generation history used by the dashboard
-- `data/sources.json`: normalized schema for the Ember-only setup
+- `data/ember-monthly-emissions-series.json`: monthly Ember power sector emissions history used by the dashboard
+- `data/sources.json`: normalized schema for the Ember dashboard setup
 
 ## Refresh the data
 
-The dashboard fetches Ember monthly data from `2020-01` through the latest available month for the supported fuel types, and checks for updates daily.
+The dashboard fetches Ember monthly generation and power sector emissions data from `2020-01` through the latest available month for the supported fuel types, and checks for updates daily.
 
 ```bash
 cd /Users/christines/Desktop/Workspace/Coal-Power-Pulse
