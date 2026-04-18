@@ -4,6 +4,10 @@ This project is a coal generation dashboard from Ember's Monthly Electricity Dat
 
 It displays every country and region returned by Ember's monthly coal generation dataset for `2025-01` through the latest available month.
 
+Live dashboard:
+
+- `https://cshearer1977.github.io/Coal-Power-Pulse/`
+
 ## Core files
 
 - `index.html`: dashboard shell
