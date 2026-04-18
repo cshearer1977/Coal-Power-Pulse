@@ -65,16 +65,13 @@ const seriesLegend = document.querySelector("#series-legend");
 const seriesSummary = document.querySelector("#series-summary");
 const seriesChart = document.querySelector("#series-chart");
 const seriesTooltip = document.querySelector("#series-tooltip");
+const START_YEAR_LABEL = "January 2020";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const FUEL_ORDER = ["Coal", "Gas", "Solar", "Solar + Wind", "Wind", "Hydro", "Nuclear", "Total generation"];
-const YEAR_COLORS = {
-  2025: "#355c9a",
-  2026: "#aa5f22",
-  2027: "#2c7a7b",
-  2028: "#8d5a97",
-};
+const YEAR_PALETTE = ["#355c9a", "#aa5f22", "#2c7a7b", "#8d5a97", "#6b8e23", "#c05621", "#2f855a", "#805ad5"];
+let hiddenYears = new Set();
 
 const createSvgNode = (tag, attributes = {}) => {
   const node = document.createElementNS(SVG_NS, tag);
@@ -88,27 +85,9 @@ const hideSeriesTooltip = () => {
   seriesTooltip.hidden = true;
 };
 
-const getYearColor = (year) => YEAR_COLORS[year] ?? "#6c6c6c";
+const getYearColor = (year) => YEAR_PALETTE[(Math.abs(Number(year) - 2020)) % YEAR_PALETTE.length] ?? "#6c6c6c";
 const getRowYear = (row) => new Date(`${row.bucket_start}T00:00:00Z`).getUTCFullYear();
 const getRowMonthIndex = (row) => new Date(`${row.bucket_start}T00:00:00Z`).getUTCMonth();
-
-const groupRowsByMarket = (rows) => {
-  const grouped = new Map();
-
-  rows.forEach((row) => {
-    if (!grouped.has(row.market)) {
-      grouped.set(row.market, []);
-    }
-
-    grouped.get(row.market).push(row);
-  });
-
-  grouped.forEach((marketRows) => {
-    marketRows.sort((a, b) => a.bucket_start.localeCompare(b.bucket_start));
-  });
-
-  return grouped;
-};
 
 const groupMonthlyRowsByYear = (rows) => {
   const grouped = new Map();
@@ -147,16 +126,19 @@ const latestRowsByMarket = (rows) => {
 const latestRowsByMarketForFuel = (rows, fuelType) =>
   latestRowsByMarket(rows.filter((row) => row.fuel_type === fuelType));
 
-const renderSeriesLegend = (items) => {
+const renderSeriesLegend = (items, toggleYear) => {
   seriesLegend.replaceChildren();
 
   items.forEach((item) => {
-    const legendItem = document.createElement("div");
-    legendItem.className = "legend-item";
+    const legendItem = document.createElement("button");
+    legendItem.type = "button";
+    legendItem.className = `legend-item${item.hidden ? " legend-item-hidden" : ""}`;
+    legendItem.setAttribute("aria-pressed", String(!item.hidden));
     legendItem.innerHTML = `
       <span class="legend-swatch" style="color: ${item.color}"></span>
       <span>${item.label}</span>
     `;
+    legendItem.addEventListener("click", () => toggleYear(item.label));
     seriesLegend.append(legendItem);
   });
 
@@ -232,7 +214,7 @@ const renderCoverage = (payload) => {
       <div class="status-pill status-${market.statusClass}">${market.statusLabel}</div>
       <h3>${market.name}</h3>
       <div class="meta-line"><strong>Source:</strong> ${market.primarySource}</div>
-      <div class="meta-line"><strong>Coverage:</strong> Monthly series from January 2025 to ${latestLabel}</div>
+      <div class="meta-line"><strong>Coverage:</strong> Monthly series from ${START_YEAR_LABEL} to ${latestLabel}</div>
     `;
     coverageGrid.append(article);
   });
@@ -255,10 +237,26 @@ const renderSeriesChart = (rows) => {
   const innerHeight = height - margin.top - margin.bottom;
   const buckets = MONTH_LABELS.map((_, index) => index);
   const bucketIndex = new Map(buckets.map((bucket, index) => [bucket, index]));
-  const values = rows.map((row) => row.power_generation_twh).filter((value) => Number.isFinite(value));
+  const byYear = groupMonthlyRowsByYear(rows);
+  const visibleYears = Array.from(byYear.keys()).filter((year) => !hiddenYears.has(year));
+  const visibleRows = rows.filter((row) => visibleYears.includes(getRowYear(row)));
+  const values = visibleRows.map((row) => row.power_generation_twh).filter((value) => Number.isFinite(value));
 
   if (!values.length) {
-    renderSeriesLegend([]);
+    const legendItems = Array.from(byYear.keys())
+      .sort((a, b) => a - b)
+      .map((year) => ({ label: String(year), color: getYearColor(year), hidden: hiddenYears.has(year) }));
+
+    renderSeriesLegend(legendItems, (label) => {
+      const year = Number(label);
+      if (hiddenYears.has(year)) {
+        hiddenYears.delete(year);
+      } else {
+        hiddenYears.add(year);
+      }
+
+      renderSeriesChart(rows);
+    });
     seriesSummary.hidden = true;
     return;
   }
@@ -349,7 +347,6 @@ const renderSeriesChart = (rows) => {
     plot.append(label);
   });
 
-  const byYear = groupMonthlyRowsByYear(rows);
   const legendItems = [];
 
   Array.from(byYear.keys())
@@ -357,6 +354,13 @@ const renderSeriesChart = (rows) => {
     .forEach((year) => {
       const yearRows = byYear.get(year);
       const color = getYearColor(year);
+
+      legendItems.push({ label: String(year), color, hidden: hiddenYears.has(year) });
+
+      if (hiddenYears.has(year)) {
+        return;
+      }
+
       const linePoints = yearRows.map((row) => `${xForRow(row)},${yForValue(row.power_generation_twh)}`).join(" ");
 
       plot.append(
@@ -395,11 +399,18 @@ const renderSeriesChart = (rows) => {
         circle.addEventListener("blur", hideSeriesTooltip);
         plot.append(circle);
       });
-
-      legendItems.push({ label: String(year), color });
     });
 
-  renderSeriesLegend(legendItems);
+  renderSeriesLegend(legendItems, (label) => {
+    const year = Number(label);
+    if (hiddenYears.has(year)) {
+      hiddenYears.delete(year);
+    } else {
+      hiddenYears.add(year);
+    }
+
+    renderSeriesChart(rows);
+  });
   seriesSummary.hidden = true;
 };
 
@@ -443,6 +454,7 @@ const renderSeriesSelector = (payload) => {
   seriesFuel.value = initialFuel;
 
   const refreshSeries = () => {
+    hiddenYears = new Set();
     const filteredRows = (payload.rows ?? []).filter(
       (row) => row.market === seriesMarket.value && row.fuel_type === seriesFuel.value
     );

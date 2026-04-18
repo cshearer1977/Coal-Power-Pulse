@@ -7,7 +7,7 @@
 It shows:
 
 - every country and region returned by the Ember monthly electricity endpoint for the supported fuel types
-- a monthly year-over-year time series from `2025-01` onward
+- a monthly year-over-year time series from `2020-01` onward
 - the latest available Ember month for the selected fuel
 - market coverage metadata derived from the Ember response itself
 

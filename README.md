@@ -2,7 +2,7 @@
 
 This project is a power generation dashboard from Ember's Monthly Electricity Data API.
 
-It displays every country and region returned by Ember's monthly electricity generation dataset for `2025-01` through the latest available month, across:
+It displays every country and region returned by Ember's monthly electricity generation dataset for `2020-01` through the latest available month, across:
 
 - Coal
 - Gas
@@ -29,7 +29,7 @@ Live dashboard:
 
 ## Refresh the data
 
-The dashboard fetches Ember monthly data from `2025-01` through the latest available month for the supported fuel types, and checks for updates daily.
+The dashboard fetches Ember monthly data from `2020-01` through the latest available month for the supported fuel types, and checks for updates daily.
 
 ```bash
 cd /Users/christines/Desktop/Workspace/Coal-Power-Pulse

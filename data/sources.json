@@ -1,6 +1,6 @@
 {
   "projectName": "Power Pulse",
-  "goal": "Track Ember monthly power generation by fuel type across the available countries and regions starting in January 2025.",
+  "goal": "Track Ember monthly power generation by fuel type across the available countries and regions starting in January 2020.",
   "normalizedRecordSchema": {
     "market": "string",
     "fuelType": "Coal | Gas | Solar | Solar + Wind | Wind | Hydro | Nuclear | Total generation",

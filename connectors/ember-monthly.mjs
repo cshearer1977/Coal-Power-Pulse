@@ -45,7 +45,7 @@ const buildQuery = (apiKey, { startDate, endDate, series }) => {
 
 export const fetchEmberMonthlySeries = async (apiKey, fetchImpl = fetch, options = {}) => {
   const {
-    startDate = "2025-01",
+    startDate = "2020-01",
     endDate = new Date().toISOString().slice(0, 7),
     seriesList = BASE_FUEL_SERIES,
   } = options;
@@ -84,7 +84,7 @@ export const summarizeEmberMarkets = (rows) =>
       const existing = markets.get(market) ?? {
         name: market,
         primarySource: "Ember API",
-        expectedCadence: "Monthly series from January 2025 onward",
+        expectedCadence: "Monthly series from January 2020 onward",
         statusLabel: row.is_aggregate_entity ? "Region" : "Country",
         statusClass: "live",
         isAggregate: Boolean(row.is_aggregate_entity),
