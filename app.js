@@ -394,7 +394,11 @@ const renderSeriesSelector = (payload) => {
     seriesMarket.append(option);
   });
 
-  const initialMarket = markets.includes("United States") ? "United States" : markets[0];
+  const initialMarket = markets.includes("World")
+    ? "World"
+    : markets.includes("United States")
+    ? "United States"
+    : markets[0];
   seriesMarket.value = initialMarket;
 
   const refreshSeries = () => {
