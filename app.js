@@ -15,12 +15,24 @@ const formatTime = (value) =>
     timeZone: "UTC",
   }).format(new Date(value));
 
-const formatAxisGwh = (value) =>
-  Number.isFinite(value)
-    ? new Intl.NumberFormat("en-US", {
-        maximumFractionDigits: 0,
-      }).format(value)
-    : "—";
+const formatAxisTwh = (value, yMax) => {
+  if (!Number.isFinite(value)) {
+    return "—";
+  }
+
+  let maximumFractionDigits = 0;
+
+  if (yMax < 1) {
+    maximumFractionDigits = 2;
+  } else if (yMax < 10) {
+    maximumFractionDigits = 1;
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+  }).format(value);
+};
 
 const formatBucketLabel = (value) =>
   new Intl.DateTimeFormat("en-US", {
@@ -296,7 +308,7 @@ const renderSeriesChart = (rows) => {
       "font-size": 12,
       "font-family": "IBM Plex Mono, monospace",
     });
-    label.textContent = formatAxisGwh(value);
+    label.textContent = formatAxisTwh(value, yMax);
     plot.append(label);
   }
 
