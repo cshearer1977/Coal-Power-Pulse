@@ -59,6 +59,15 @@ const roundValue = (value, digits = 4) => {
   return Number(value.toFixed(digits));
 };
 
+const parseNullableNumber = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
 const buildQuery = (route, apiKey, { startDate, endDate, series }) => {
   const url = new URL(route);
   url.searchParams.set("api_key", apiKey);
@@ -145,8 +154,8 @@ export const normalizeEmberMonthlyDataset = (
   const baseRecords = responses.flatMap(({ rows, url, series }) =>
     rows.map((row) => {
       const market = row.entity === "EU" ? "European Union" : row.entity;
-      const value = Number(row[config.valueField]);
-      const sharePct = Number(row[config.shareField]);
+      const value = parseNullableNumber(row[config.valueField]);
+      const sharePct = parseNullableNumber(row[config.shareField]);
 
       return {
         market,
@@ -186,18 +195,24 @@ export const normalizeEmberMonthlyDataset = (
           sourceUrl: config.route,
           datasetKey,
           datasetLabel: config.label,
-          value: 0,
-          sharePct: 0,
+          value: null,
+          sharePct: null,
           granularity: "monthly",
           latencyCategory: "delayed",
           seriesName: "Solar + Wind",
           notes: config.combinedNotes,
         };
 
-        const value = Number(row[config.valueField]);
-        const sharePct = Number(row[config.shareField]);
-        entry.value += Number.isFinite(value) ? value : 0;
-        entry.sharePct += Number.isFinite(sharePct) ? sharePct : 0;
+        const value = parseNullableNumber(row[config.valueField]);
+        const sharePct = parseNullableNumber(row[config.shareField]);
+
+        if (Number.isFinite(value)) {
+          entry.value = (entry.value ?? 0) + value;
+        }
+
+        if (Number.isFinite(sharePct)) {
+          entry.sharePct = (entry.sharePct ?? 0) + sharePct;
+        }
 
         combined.set(key, entry);
       });
