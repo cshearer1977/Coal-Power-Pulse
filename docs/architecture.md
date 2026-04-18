@@ -18,6 +18,7 @@ The current dashboard fetches and renders these Ember monthly series:
 - `Coal`
 - `Gas`
 - `Solar`
+- `Solar + Wind`
 - `Wind`
 - `Hydro`
 - `Nuclear`

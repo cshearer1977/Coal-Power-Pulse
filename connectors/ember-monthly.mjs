@@ -4,6 +4,17 @@ export const DEFAULT_FUEL_SERIES = [
   "Coal",
   "Gas",
   "Solar",
+  "Solar + Wind",
+  "Wind",
+  "Hydro",
+  "Nuclear",
+  "Total generation",
+];
+
+const BASE_FUEL_SERIES = [
+  "Coal",
+  "Gas",
+  "Solar",
   "Wind",
   "Hydro",
   "Nuclear",
@@ -13,6 +24,14 @@ export const DEFAULT_FUEL_SERIES = [
 const monthEndIso = (value) => {
   const [year, month] = value.slice(0, 10).split("-").map(Number);
   return new Date(Date.UTC(year, month, 0, 23, 59, 59)).toISOString();
+};
+
+const roundValue = (value, digits = 4) => {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  return Number(value.toFixed(digits));
 };
 
 const buildQuery = (apiKey, { startDate, endDate, series }) => {
@@ -28,7 +47,7 @@ export const fetchEmberMonthlySeries = async (apiKey, fetchImpl = fetch, options
   const {
     startDate = "2025-01",
     endDate = new Date().toISOString().slice(0, 7),
-    seriesList = DEFAULT_FUEL_SERIES,
+    seriesList = BASE_FUEL_SERIES,
   } = options;
 
   const responses = await Promise.all(
@@ -77,27 +96,71 @@ export const summarizeEmberMarkets = (rows) =>
   ).sort((a, b) => a.name.localeCompare(b.name));
 
 export const normalizeEmberMonthlySeries = (responses, fetchedAt = new Date().toISOString()) =>
-  responses.flatMap(({ rows, url, series }) =>
-    rows.map((row) => {
-      const market = row.entity === "EU" ? "European Union" : row.entity;
-      const generationTwh = Number(row.generation_twh);
-      const sharePct = Number(row.share_of_generation_pct);
+  [
+    ...responses.flatMap(({ rows, url, series }) =>
+      rows.map((row) => {
+        const market = row.entity === "EU" ? "European Union" : row.entity;
+        const generationTwh = Number(row.generation_twh);
+        const sharePct = Number(row.share_of_generation_pct);
 
-      return {
-        market,
-        fuelType: series,
-        regionType: row.is_aggregate_entity ? "bloc" : "country",
-        observedAt: monthEndIso(row.date),
-        fetchedAt,
-        source: "Ember API",
-        sourceUrl: url,
-        powerGenerationTwh: generationTwh,
-        powerGenerationMwh: Number.isFinite(generationTwh) ? generationTwh * 1_000_000 : null,
-        powerSharePct: Number.isFinite(sharePct) ? sharePct : null,
-        granularity: "monthly",
-        latencyCategory: "delayed",
-        seriesName: series,
-        notes: `Uses Ember's official monthly electricity generation API for the ${series} series.`,
-      };
-    })
+        return {
+          market,
+          fuelType: series,
+          regionType: row.is_aggregate_entity ? "bloc" : "country",
+          observedAt: monthEndIso(row.date),
+          fetchedAt,
+          source: "Ember API",
+          sourceUrl: url,
+          powerGenerationTwh: generationTwh,
+          powerGenerationMwh: Number.isFinite(generationTwh) ? generationTwh * 1_000_000 : null,
+          powerSharePct: Number.isFinite(sharePct) ? sharePct : null,
+          granularity: "monthly",
+          latencyCategory: "delayed",
+          seriesName: series,
+          notes: `Uses Ember's official monthly electricity generation API for the ${series} series.`,
+        };
+      })
+    ),
+  ].concat(
+    Array.from(
+      responses.reduce((combined, { rows, series }) => {
+        if (series !== "Solar" && series !== "Wind") {
+          return combined;
+        }
+
+        rows.forEach((row) => {
+          const market = row.entity === "EU" ? "European Union" : row.entity;
+          const key = `${market}::${row.date}`;
+          const entry = combined.get(key) ?? {
+            market,
+            regionType: row.is_aggregate_entity ? "bloc" : "country",
+            observedAt: monthEndIso(row.date),
+            fetchedAt,
+            source: "Ember API",
+            sourceUrl: EMBER_ROUTE,
+            powerGenerationTwh: 0,
+            powerSharePct: 0,
+            granularity: "monthly",
+            latencyCategory: "delayed",
+            seriesName: "Solar + Wind",
+            notes: "Derived by summing Ember's Solar and Wind monthly series.",
+          };
+
+          const generationTwh = Number(row.generation_twh);
+          const sharePct = Number(row.share_of_generation_pct);
+          entry.powerGenerationTwh += Number.isFinite(generationTwh) ? generationTwh : 0;
+          entry.powerSharePct += Number.isFinite(sharePct) ? sharePct : 0;
+
+          combined.set(key, entry);
+        });
+
+        return combined;
+      }, new Map()).values()
+    ).map((entry) => ({
+      ...entry,
+      fuelType: "Solar + Wind",
+      powerGenerationTwh: roundValue(entry.powerGenerationTwh),
+      powerGenerationMwh: Number.isFinite(entry.powerGenerationTwh) ? roundValue(entry.powerGenerationTwh * 1_000_000, 0) : null,
+      powerSharePct: roundValue(entry.powerSharePct, 2),
+    }))
   );

@@ -3,7 +3,7 @@
   "goal": "Track Ember monthly power generation by fuel type across the available countries and regions starting in January 2025.",
   "normalizedRecordSchema": {
     "market": "string",
-    "fuelType": "Coal | Gas | Solar | Wind | Hydro | Nuclear | Total generation",
+    "fuelType": "Coal | Gas | Solar | Solar + Wind | Wind | Hydro | Nuclear | Total generation",
     "regionType": "country | bloc",
     "observedAt": "ISO-8601 UTC timestamp for the month-end observation",
     "fetchedAt": "ISO-8601 UTC timestamp for the Ember ingestion run",

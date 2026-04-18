@@ -56,7 +56,7 @@ const seriesTooltip = document.querySelector("#series-tooltip");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const FUEL_ORDER = ["Coal", "Gas", "Solar", "Wind", "Hydro", "Nuclear", "Total generation"];
+const FUEL_ORDER = ["Coal", "Gas", "Solar", "Solar + Wind", "Wind", "Hydro", "Nuclear", "Total generation"];
 const YEAR_COLORS = {
   2025: "#355c9a",
   2026: "#aa5f22",

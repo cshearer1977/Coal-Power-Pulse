@@ -7,6 +7,7 @@ It displays every country and region returned by Ember's monthly electricity gen
 - Coal
 - Gas
 - Solar
+- Solar + Wind
 - Wind
 - Hydro
 - Nuclear
