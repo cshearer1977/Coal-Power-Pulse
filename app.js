@@ -105,6 +105,7 @@ const YEAR_PALETTE = [
   "#c63f27",
   "#5f6cbc",
 ];
+const ANNUAL_SERIES_PALETTE = YEAR_PALETTE.slice(0, 5);
 
 const METRIC_CONFIG = {
   generation: {
@@ -555,7 +556,7 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
         .slice()
         .sort((a, b) => a.bucket_start.localeCompare(b.bucket_start))
         .filter((row) => Number.isFinite(display.valueForRow(row, metric)));
-      const color = YEAR_PALETTE[fuelIndex % YEAR_PALETTE.length];
+      const color = ANNUAL_SERIES_PALETTE[fuelIndex % ANNUAL_SERIES_PALETTE.length];
       const dashArray = getFuelDashArray(fuelType);
       const linePoints = fuelRows.map((row) => `${xForRow(row)},${yForValue(display.valueForRow(row, metric))}`).join(" ");
 
