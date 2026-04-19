@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./app.css?v=20260419c" />
+    <link rel="stylesheet" href="./app.css?v=20260419d" />
   </head>
   <body>
     <div class="page-shell">
@@ -42,10 +42,19 @@
                 <span>Country/Region</span>
                 <select id="series-market"></select>
               </label>
-              <label class="series-control" for="series-fuel">
+              <div class="series-control">
                 <span>Fuel Type</span>
-                <select id="series-fuel"></select>
-              </label>
+                <div class="fuel-filter">
+                  <button
+                    id="series-fuel-button"
+                    class="fuel-filter-button"
+                    type="button"
+                    aria-haspopup="true"
+                    aria-expanded="false"
+                  ></button>
+                  <div id="series-fuel-menu" class="fuel-filter-menu" hidden></div>
+                </div>
+              </div>
               <label class="series-control" for="series-cadence">
                 <span>Time Series</span>
                 <select id="series-cadence"></select>
@@ -109,6 +118,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260419c"></script>
+    <script type="module" src="./app.js?v=20260419d"></script>
   </body>
 </html>

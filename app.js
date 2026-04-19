@@ -81,7 +81,8 @@ const seriesMetric = document.querySelector("#series-metric");
 const seriesCadence = document.querySelector("#series-cadence");
 const seriesDisplay = document.querySelector("#series-display");
 const seriesMarket = document.querySelector("#series-market");
-const seriesFuel = document.querySelector("#series-fuel");
+const seriesFuelButton = document.querySelector("#series-fuel-button");
+const seriesFuelMenu = document.querySelector("#series-fuel-menu");
 const seriesLegend = document.querySelector("#series-legend");
 const seriesSummary = document.querySelector("#series-summary");
 const seriesChart = document.querySelector("#series-chart");
@@ -143,6 +144,8 @@ const DISPLAY_CONFIG = {
 };
 
 let hiddenYears = new Set();
+let selectedFuelTypes = new Set(["Coal"]);
+let availableFuelTypes = [];
 
 const createSvgNode = (tag, attributes = {}) => {
   const node = document.createElementNS(SVG_NS, tag);
@@ -184,6 +187,107 @@ const groupMonthlyRowsByYear = (rows) => {
   });
 
   return grouped;
+};
+
+const getFuelSelectionLabel = (fuelTypes) => {
+  const selected = fuelTypes.filter((fuel) => selectedFuelTypes.has(fuel));
+
+  if (!selected.length) {
+    return "Select fuels";
+  }
+
+  if (selected.length <= 2) {
+    return selected.join(" + ");
+  }
+
+  return `${selected.length} fuels`;
+};
+
+const getCombinedFuelLabel = () => {
+  const selected = availableFuelTypes.filter((fuel) => selectedFuelTypes.has(fuel));
+  return selected.length <= 2 ? selected.join(" + ") : `${selected.length} fuels combined`;
+};
+
+const aggregateRowsByFuelSelection = (rows, metricKey) => {
+  const selected = availableFuelTypes.filter((fuel) => selectedFuelTypes.has(fuel));
+
+  if (selected.length <= 1) {
+    return rows.filter((row) => row.fuel_type === selected[0]);
+  }
+
+  const metric = METRIC_CONFIG[metricKey];
+  const grouped = new Map();
+
+  rows
+    .filter((row) => selectedFuelTypes.has(row.fuel_type))
+    .forEach((row) => {
+      const key = `${row.market}__${row.bucket_start}`;
+      const existing = grouped.get(key) ?? {
+        market: row.market,
+        fuel_type: getCombinedFuelLabel(),
+        bucket_start: row.bucket_start,
+        observed_at: row.observed_at,
+        [metric.valueKey]: 0,
+        [metric.shareKey]: 0,
+        source: row.source,
+        source_family: row.source_family,
+        source_label: row.source_label,
+        connector: row.connector,
+        is_proxy: row.is_proxy,
+      };
+
+      existing.observed_at = row.observed_at > existing.observed_at ? row.observed_at : existing.observed_at;
+      existing[metric.valueKey] += Number.isFinite(row[metric.valueKey]) ? row[metric.valueKey] : 0;
+      existing[metric.shareKey] += Number.isFinite(row[metric.shareKey]) ? row[metric.shareKey] : 0;
+      grouped.set(key, existing);
+    });
+
+  return Array.from(grouped.values()).sort((a, b) => a.bucket_start.localeCompare(b.bucket_start));
+};
+
+const buildAnnualRowsFromMonthlyRows = (payload, monthlyRows, metricKey, market, fuelLabel, isTotalSelection) => {
+  const metric = METRIC_CONFIG[metricKey];
+  const marketRows = monthlyRows.filter((row) => row.market === market);
+  const years = Array.from(new Set(marketRows.map((row) => row.bucket_start.slice(0, 4)))).sort();
+
+  return years
+    .map((year) => {
+      const fuelRows = marketRows.filter((row) => row.bucket_start.startsWith(`${year}-`));
+      const totalRows = isTotalSelection
+        ? fuelRows
+        : (payload.rows ?? []).filter(
+            (row) => row.market === market && row.fuel_type === "Total generation" && row.bucket_start.startsWith(`${year}-`)
+          );
+
+      if (fuelRows.length !== 12 || totalRows.length !== 12) {
+        return null;
+      }
+
+      const fuelValues = fuelRows.map((row) => row[metric.valueKey]);
+      const totalValues = totalRows.map((row) => row[metric.valueKey]);
+
+      if (!fuelValues.every(Number.isFinite) || !totalValues.every(Number.isFinite)) {
+        return null;
+      }
+
+      const annualValue = fuelValues.reduce((sum, value) => sum + value, 0);
+      const annualTotal = totalValues.reduce((sum, value) => sum + value, 0);
+
+      return {
+        market,
+        fuel_type: fuelLabel,
+        bucket_start: `${year}-01-01`,
+        observed_at: `${year}-12-31T23:59:59.000Z`,
+        [metric.valueKey]: annualValue,
+        [metric.shareKey]: annualTotal > 0 ? (annualValue / annualTotal) * 100 : null,
+        source: "Ember API",
+        source_family: "Ember",
+        source_label: "Ember API",
+        connector: `ember-annual-${metricKey}`,
+        is_proxy: false,
+      };
+    })
+    .filter(Boolean);
 };
 
 const buildAnnualRows = (payload, metricKey, market, fuelType) => {
@@ -287,7 +391,7 @@ const showSeriesTooltip = ({ row, metric, x, y }) => {
   seriesTooltip.hidden = false;
 };
 
-const renderLatestSnapshot = (payload, metricKey, fuelType) => {
+const renderLatestSnapshot = (payload, metricKey) => {
   const metric = METRIC_CONFIG[metricKey];
 
   if (!payload?.generatedAt || !Array.isArray(payload.rows)) {
@@ -298,7 +402,7 @@ const renderLatestSnapshot = (payload, metricKey, fuelType) => {
   snapshotGeneratedAt.textContent = `Ember monthly export generated ${formatTime(payload.generatedAt)}`;
   snapshotBody.replaceChildren();
 
-  latestRowsByMarketForFuel(payload.rows, fuelType).forEach((row) => {
+  latestRowsByMarket(aggregateRowsByFuelSelection(payload.rows, metricKey)).forEach((row) => {
     const tableRow = document.createElement("tr");
     tableRow.innerHTML = `
       <td>${row.market}</td>
@@ -615,7 +719,6 @@ const renderSeriesControls = (datasets) => {
   seriesCadence.replaceChildren();
   seriesDisplay.replaceChildren();
   seriesMarket.replaceChildren();
-  seriesFuel.replaceChildren();
 
   const markets = Array.from(new Set((generationPayload.rows ?? []).map((row) => row.market))).sort(compareMarkets);
   const fuels = (generationPayload.fuelTypes ?? []).slice().sort((a, b) => {
@@ -623,6 +726,7 @@ const renderSeriesControls = (datasets) => {
     const bi = FUEL_ORDER.indexOf(b);
     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
   });
+  availableFuelTypes = fuels;
 
   if (!markets.length) {
     seriesSummary.hidden = true;
@@ -657,13 +761,6 @@ const renderSeriesControls = (datasets) => {
     seriesMarket.append(option);
   });
 
-  fuels.forEach((fuel) => {
-    const option = document.createElement("option");
-    option.value = fuel;
-    option.textContent = fuel;
-    seriesFuel.append(option);
-  });
-
   seriesMetric.value = "generation";
   seriesCadence.value = "monthly";
   seriesDisplay.value = "value";
@@ -672,29 +769,87 @@ const renderSeriesControls = (datasets) => {
     : markets.includes("United States")
     ? "United States"
     : markets[0];
-  seriesFuel.value = fuels.includes("Coal") ? "Coal" : fuels[0];
+  selectedFuelTypes = new Set([fuels.includes("Coal") ? "Coal" : fuels[0]]);
+
+  const updateFuelButton = () => {
+    seriesFuelButton.textContent = getFuelSelectionLabel(fuels);
+  };
+
+  const closeFuelMenu = () => {
+    seriesFuelMenu.hidden = true;
+    seriesFuelButton.setAttribute("aria-expanded", "false");
+  };
+
+  const renderFuelMenu = () => {
+    seriesFuelMenu.replaceChildren();
+
+    fuels.forEach((fuel) => {
+      const option = document.createElement("label");
+      option.className = "fuel-filter-option";
+
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = selectedFuelTypes.has(fuel);
+      input.value = fuel;
+      input.addEventListener("change", () => {
+        if (fuel === "Total generation" && input.checked) {
+          selectedFuelTypes = new Set(["Total generation"]);
+        } else if (fuel !== "Total generation" && input.checked) {
+          selectedFuelTypes.delete("Total generation");
+          selectedFuelTypes.add(fuel);
+        } else if (selectedFuelTypes.size > 1) {
+          selectedFuelTypes.delete(fuel);
+        } else {
+          input.checked = true;
+          return;
+        }
+
+        renderFuelMenu();
+        updateFuelButton();
+        refreshSeries();
+      });
+
+      const text = document.createElement("span");
+      text.textContent = fuel;
+
+      option.append(input, text);
+      seriesFuelMenu.append(option);
+    });
+  };
 
   const refreshSeries = () => {
     const activePayload = datasets[seriesMetric.value];
+    const monthlyRows = aggregateRowsByFuelSelection(activePayload.rows ?? [], seriesMetric.value);
+    const isTotalSelection = selectedFuelTypes.size === 1 && selectedFuelTypes.has("Total generation");
+    const fuelLabel = getCombinedFuelLabel();
     const filteredRows =
       seriesCadence.value === "annual"
-        ? buildAnnualRows(activePayload, seriesMetric.value, seriesMarket.value, seriesFuel.value)
-        : (activePayload.rows ?? []).filter(
-            (row) => row.market === seriesMarket.value && row.fuel_type === seriesFuel.value
-          );
+        ? buildAnnualRowsFromMonthlyRows(activePayload, monthlyRows, seriesMetric.value, seriesMarket.value, fuelLabel, isTotalSelection)
+        : monthlyRows.filter((row) => row.market === seriesMarket.value);
 
     hiddenYears = seriesCadence.value === "annual" ? new Set() : getDefaultHiddenYears(filteredRows);
     renderSeriesChart(filteredRows, seriesMetric.value, seriesDisplay.value, seriesCadence.value);
-    renderLatestSnapshot(activePayload, seriesMetric.value, seriesFuel.value);
+    renderLatestSnapshot(activePayload, seriesMetric.value);
     renderCoverage(activePayload);
   };
 
+  renderFuelMenu();
+  updateFuelButton();
   refreshSeries();
   seriesMetric.addEventListener("change", refreshSeries);
   seriesCadence.addEventListener("change", refreshSeries);
   seriesDisplay.addEventListener("change", refreshSeries);
   seriesMarket.addEventListener("change", refreshSeries);
-  seriesFuel.addEventListener("change", refreshSeries);
+  seriesFuelButton.addEventListener("click", () => {
+    const isOpen = !seriesFuelMenu.hidden;
+    seriesFuelMenu.hidden = isOpen;
+    seriesFuelButton.setAttribute("aria-expanded", String(!isOpen));
+  });
+  document.addEventListener("click", (event) => {
+    if (!seriesFuelMenu.hidden && !seriesFuelMenu.contains(event.target) && !seriesFuelButton.contains(event.target)) {
+      closeFuelMenu();
+    }
+  });
 };
 
 const load = async () => {
@@ -710,7 +865,6 @@ const load = async () => {
 
   schemaPreview.textContent = JSON.stringify(sources.normalizedRecordSchema, null, 2);
   renderCoverage(generationMonthly);
-  renderLatestSnapshot(generationMonthly, "generation", "Coal");
   renderSeriesControls({
     generation: generationMonthly,
     emissions: emissionsMonthly,
