@@ -60,6 +60,8 @@ const formatBucketLabel = (value) =>
     timeZone: "UTC",
   }).format(new Date(`${value}T00:00:00Z`));
 
+const formatAnnualPeriodLabel = (value) => `Jan-Dec ${value.slice(0, 4)}`;
+
 const compareMarkets = (a, b) => {
   if (a === "World" && b !== "World") {
     return -1;
@@ -325,13 +327,13 @@ const renderSeriesLegend = (items, toggleYear) => {
   seriesLegend.hidden = items.length === 0;
 };
 
-const showSeriesTooltip = ({ row, metric, x, y }) => {
+const showSeriesTooltip = ({ row, metric, x, y, periodLabel }) => {
   const chartBounds = seriesChart.getBoundingClientRect();
 
   seriesTooltip.innerHTML = `
     <strong>${row.market}</strong>
     <div>Fuel: ${row.fuel_type}</div>
-    <div>Period: ${formatBucketLabel(row.bucket_start)}</div>
+    <div>Period: ${periodLabel ?? formatBucketLabel(row.bucket_start)}</div>
     <div>${metric.label}: ${formatNumber(row[metric.valueKey])} ${metric.unit}</div>
     <div>Share: ${formatPct(row[metric.shareKey])}</div>
     <div>Source: Ember API</div>
@@ -592,10 +594,16 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
         });
 
         const title = createSvgNode("title");
-        title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${row.bucket_start.slice(0, 4)}`;
+        title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${formatAnnualPeriodLabel(
+          row.bucket_start
+        )}`;
         circle.append(title);
-        circle.addEventListener("mouseenter", () => showSeriesTooltip({ row, metric, x, y }));
-        circle.addEventListener("focus", () => showSeriesTooltip({ row, metric, x, y }));
+        circle.addEventListener("mouseenter", () =>
+          showSeriesTooltip({ row, metric, x, y, periodLabel: formatAnnualPeriodLabel(row.bucket_start) })
+        );
+        circle.addEventListener("focus", () =>
+          showSeriesTooltip({ row, metric, x, y, periodLabel: formatAnnualPeriodLabel(row.bucket_start) })
+        );
         circle.addEventListener("mouseleave", hideSeriesTooltip);
         circle.addEventListener("blur", hideSeriesTooltip);
         plot.append(circle);
