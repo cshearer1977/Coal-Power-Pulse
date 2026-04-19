@@ -36,6 +36,20 @@ const formatAxisValue = (value, yMax, suffix = "") => {
   );
 };
 
+const getYAxisMax = (maxValue) => {
+  if (!Number.isFinite(maxValue) || maxValue <= 0) {
+    return 1;
+  }
+
+  if (maxValue < 10) {
+    return maxValue * 1.1;
+  }
+
+  const rawStep = maxValue / 4;
+  const step = Math.ceil(rawStep / 5) * 5;
+  return step * 4;
+};
+
 const formatBucketLabel = (value) =>
   new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -383,7 +397,7 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
   }
 
   const maxValue = Math.max(...values, 0);
-  const yMax = maxValue > 0 ? maxValue * 1.1 : 1;
+  const yMax = getYAxisMax(maxValue);
   const xStep = innerWidth / (Math.max(buckets.length, 2) - 1);
 
   const xForBucket = (bucket) => margin.left + xStep * bucketIndex.get(bucket);
