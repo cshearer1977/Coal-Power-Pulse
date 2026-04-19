@@ -15,7 +15,7 @@ const formatTime = (value) =>
     timeZone: "UTC",
   }).format(new Date(value));
 
-const formatAxisValue = (value, yMax) => {
+const formatAxisValue = (value, yMax, suffix = "") => {
   if (!Number.isFinite(value)) {
     return "—";
   }
@@ -31,7 +31,7 @@ const formatAxisValue = (value, yMax) => {
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits,
-  }).format(value);
+  }).format(value) + suffix;
 };
 
 const formatBucketLabel = (value) =>
@@ -59,6 +59,7 @@ const snapshotBody = document.querySelector("#snapshot-body");
 const snapshotGeneratedAt = document.querySelector("#snapshot-generated-at");
 const coverageGeneratedAt = document.querySelector("#coverage-generated-at");
 const seriesMetric = document.querySelector("#series-metric");
+const seriesDisplay = document.querySelector("#series-display");
 const seriesMarket = document.querySelector("#series-market");
 const seriesFuel = document.querySelector("#series-fuel");
 const seriesLegend = document.querySelector("#series-legend");
@@ -70,6 +71,7 @@ const START_YEAR_LABEL = "January 2020";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const METRIC_ORDER = ["generation", "emissions"];
+const DISPLAY_ORDER = ["value", "share"];
 const FUEL_ORDER = ["Coal", "Gas", "Solar", "Solar + Wind", "Wind", "Hydro", "Nuclear", "Total generation"];
 const YEAR_PALETTE = [
   "#016b83",
@@ -98,6 +100,21 @@ const METRIC_CONFIG = {
     valueKey: "power_sector_emissions_mtco2",
     shareKey: "emissions_share_pct",
     sourcePath: "data/ember-monthly-emissions-series.json",
+  },
+};
+
+const DISPLAY_CONFIG = {
+  value: {
+    label: "Value",
+    axisLabel: (metric) => metric.unit,
+    valueForRow: (row, metric) => row[metric.valueKey],
+    formatForTooltip: (row, metric) => `${formatNumber(row[metric.valueKey])} ${metric.unit}`,
+  },
+  share: {
+    label: "Percent share",
+    axisLabel: () => "%",
+    valueForRow: (row, metric) => row[metric.shareKey],
+    formatForTooltip: (row, metric) => formatPct(row[metric.shareKey]),
   },
 };
 
@@ -257,8 +274,9 @@ const renderCoverage = (payload) => {
   });
 };
 
-const renderSeriesChart = (rows, metricKey) => {
+const renderSeriesChart = (rows, metricKey, displayKey) => {
   const metric = METRIC_CONFIG[metricKey];
+  const display = DISPLAY_CONFIG[displayKey];
 
   seriesChart.replaceChildren();
   hideSeriesTooltip();
@@ -279,7 +297,7 @@ const renderSeriesChart = (rows, metricKey) => {
   const byYear = groupMonthlyRowsByYear(rows);
   const visibleYears = Array.from(byYear.keys()).filter((year) => !hiddenYears.has(year));
   const visibleRows = rows.filter((row) => visibleYears.includes(getRowYear(row)));
-  const values = visibleRows.map((row) => row[metric.valueKey]).filter((value) => Number.isFinite(value));
+  const values = visibleRows.map((row) => display.valueForRow(row, metric)).filter((value) => Number.isFinite(value));
 
   const toggleYear = (label) => {
     const year = Number(label);
@@ -289,7 +307,7 @@ const renderSeriesChart = (rows, metricKey) => {
       hiddenYears.add(year);
     }
 
-    renderSeriesChart(rows, metricKey);
+    renderSeriesChart(rows, metricKey, displayKey);
   };
 
   if (!values.length) {
@@ -322,7 +340,7 @@ const renderSeriesChart = (rows, metricKey) => {
     "font-size": 12,
     "font-family": "IBM Plex Mono, monospace",
   });
-  axisLabel.textContent = metric.unit;
+  axisLabel.textContent = display.axisLabel(metric);
   plot.append(axisLabel);
 
   for (let tick = 0; tick <= yTicks; tick += 1) {
@@ -347,7 +365,7 @@ const renderSeriesChart = (rows, metricKey) => {
       "font-size": 12,
       "font-family": "IBM Plex Mono, monospace",
     });
-    label.textContent = formatAxisValue(value, yMax);
+    label.textContent = formatAxisValue(value, yMax, displayKey === "share" ? "%" : "");
     plot.append(label);
   }
 
@@ -402,7 +420,14 @@ const renderSeriesChart = (rows, metricKey) => {
         return;
       }
 
-      const linePoints = yearRows.map((row) => `${xForRow(row)},${yForValue(row[metric.valueKey])}`).join(" ");
+      const linePoints = yearRows
+        .filter((row) => Number.isFinite(display.valueForRow(row, metric)))
+        .map((row) => `${xForRow(row)},${yForValue(display.valueForRow(row, metric))}`)
+        .join(" ");
+
+      if (!linePoints) {
+        return;
+      }
 
       plot.append(
         createSvgNode("polyline", {
@@ -416,8 +441,14 @@ const renderSeriesChart = (rows, metricKey) => {
       );
 
       yearRows.forEach((row) => {
+        const plottedValue = display.valueForRow(row, metric);
+
+        if (!Number.isFinite(plottedValue)) {
+          return;
+        }
+
         const x = xForRow(row);
-        const y = yForValue(row[metric.valueKey]);
+        const y = yForValue(plottedValue);
         const circle = createSvgNode("circle", {
           cx: x,
           cy: y,
@@ -429,9 +460,7 @@ const renderSeriesChart = (rows, metricKey) => {
         });
 
         const title = createSvgNode("title");
-        title.textContent = `${row.market}: ${formatNumber(row[metric.valueKey])} ${metric.unit} in ${formatBucketLabel(
-          row.bucket_start
-        )}`;
+        title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${formatBucketLabel(row.bucket_start)}`;
         circle.append(title);
         circle.addEventListener("mouseenter", () => showSeriesTooltip({ row, metric, x, y }));
         circle.addEventListener("focus", () => showSeriesTooltip({ row, metric, x, y }));
@@ -449,6 +478,7 @@ const renderSeriesControls = (datasets) => {
   const generationPayload = datasets.generation;
 
   seriesMetric.replaceChildren();
+  seriesDisplay.replaceChildren();
   seriesMarket.replaceChildren();
   seriesFuel.replaceChildren();
 
@@ -471,6 +501,13 @@ const renderSeriesControls = (datasets) => {
     seriesMetric.append(option);
   });
 
+  DISPLAY_ORDER.forEach((displayKey) => {
+    const option = document.createElement("option");
+    option.value = displayKey;
+    option.textContent = DISPLAY_CONFIG[displayKey].label;
+    seriesDisplay.append(option);
+  });
+
   markets.forEach((market) => {
     const option = document.createElement("option");
     option.value = market;
@@ -486,6 +523,7 @@ const renderSeriesControls = (datasets) => {
   });
 
   seriesMetric.value = "generation";
+  seriesDisplay.value = "value";
   seriesMarket.value = markets.includes("World")
     ? "World"
     : markets.includes("United States")
@@ -500,13 +538,14 @@ const renderSeriesControls = (datasets) => {
     );
 
     hiddenYears = getDefaultHiddenYears(filteredRows);
-    renderSeriesChart(filteredRows, seriesMetric.value);
+    renderSeriesChart(filteredRows, seriesMetric.value, seriesDisplay.value);
     renderLatestSnapshot(activePayload, seriesMetric.value, seriesFuel.value);
     renderCoverage(activePayload);
   };
 
   refreshSeries();
   seriesMetric.addEventListener("change", refreshSeries);
+  seriesDisplay.addEventListener("change", refreshSeries);
   seriesMarket.addEventListener("change", refreshSeries);
   seriesFuel.addEventListener("change", refreshSeries);
 };
