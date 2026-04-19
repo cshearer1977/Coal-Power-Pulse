@@ -203,92 +203,42 @@ const getFuelSelectionLabel = (fuelTypes) => {
   return `${selected.length} fuels`;
 };
 
-const getCombinedFuelLabel = () => {
-  const selected = availableFuelTypes.filter((fuel) => selectedFuelTypes.has(fuel));
-  return selected.length <= 2 ? selected.join(" + ") : `${selected.length} fuels combined`;
+const getSelectedFuelTypes = () => availableFuelTypes.filter((fuel) => selectedFuelTypes.has(fuel));
+
+const filterRowsByFuelSelection = (rows) => rows.filter((row) => selectedFuelTypes.has(row.fuel_type));
+
+const getFuelDashArray = (fuelType) => {
+  const selected = getSelectedFuelTypes();
+  const index = Math.max(selected.indexOf(fuelType), 0);
+  const dashPatterns = [null, "10 6", "4 5", "14 5 4 5", "2 4", "12 4 2 4", "16 6", "6 4 2 4"];
+  return dashPatterns[index % dashPatterns.length];
 };
 
-const aggregateRowsByFuelSelection = (rows, metricKey) => {
-  const selected = availableFuelTypes.filter((fuel) => selectedFuelTypes.has(fuel));
+const getMonthlySeriesLabel = (row, hasMultipleFuels) =>
+  hasMultipleFuels ? `${row.fuel_type} ${getRowYear(row)}` : String(getRowYear(row));
 
-  if (selected.length <= 1) {
-    return rows.filter((row) => row.fuel_type === selected[0]);
-  }
+const latestRowsByMarketAndFuel = (rows) => {
+  const byKey = new Map();
 
-  const metric = METRIC_CONFIG[metricKey];
-  const grouped = new Map();
+  rows.forEach((row) => {
+    const key = `${row.market}__${row.fuel_type}`;
+    const existing = byKey.get(key);
 
-  rows
-    .filter((row) => selectedFuelTypes.has(row.fuel_type))
-    .forEach((row) => {
-      const key = `${row.market}__${row.bucket_start}`;
-      const existing = grouped.get(key) ?? {
-        market: row.market,
-        fuel_type: getCombinedFuelLabel(),
-        bucket_start: row.bucket_start,
-        observed_at: row.observed_at,
-        [metric.valueKey]: 0,
-        [metric.shareKey]: 0,
-        source: row.source,
-        source_family: row.source_family,
-        source_label: row.source_label,
-        connector: row.connector,
-        is_proxy: row.is_proxy,
-      };
+    if (!existing || new Date(row.observed_at).getTime() > new Date(existing.observed_at).getTime()) {
+      byKey.set(key, row);
+    }
+  });
 
-      existing.observed_at = row.observed_at > existing.observed_at ? row.observed_at : existing.observed_at;
-      existing[metric.valueKey] += Number.isFinite(row[metric.valueKey]) ? row[metric.valueKey] : 0;
-      existing[metric.shareKey] += Number.isFinite(row[metric.shareKey]) ? row[metric.shareKey] : 0;
-      grouped.set(key, existing);
-    });
-
-  return Array.from(grouped.values()).sort((a, b) => a.bucket_start.localeCompare(b.bucket_start));
+  return Array.from(byKey.values()).sort(
+    (a, b) =>
+      a.market.localeCompare(b.market) ||
+      FUEL_ORDER.indexOf(a.fuel_type) - FUEL_ORDER.indexOf(b.fuel_type) ||
+      a.fuel_type.localeCompare(b.fuel_type)
+  );
 };
 
-const buildAnnualRowsFromMonthlyRows = (payload, monthlyRows, metricKey, market, fuelLabel, isTotalSelection) => {
-  const metric = METRIC_CONFIG[metricKey];
-  const marketRows = monthlyRows.filter((row) => row.market === market);
-  const years = Array.from(new Set(marketRows.map((row) => row.bucket_start.slice(0, 4)))).sort();
-
-  return years
-    .map((year) => {
-      const fuelRows = marketRows.filter((row) => row.bucket_start.startsWith(`${year}-`));
-      const totalRows = isTotalSelection
-        ? fuelRows
-        : (payload.rows ?? []).filter(
-            (row) => row.market === market && row.fuel_type === "Total generation" && row.bucket_start.startsWith(`${year}-`)
-          );
-
-      if (fuelRows.length !== 12 || totalRows.length !== 12) {
-        return null;
-      }
-
-      const fuelValues = fuelRows.map((row) => row[metric.valueKey]);
-      const totalValues = totalRows.map((row) => row[metric.valueKey]);
-
-      if (!fuelValues.every(Number.isFinite) || !totalValues.every(Number.isFinite)) {
-        return null;
-      }
-
-      const annualValue = fuelValues.reduce((sum, value) => sum + value, 0);
-      const annualTotal = totalValues.reduce((sum, value) => sum + value, 0);
-
-      return {
-        market,
-        fuel_type: fuelLabel,
-        bucket_start: `${year}-01-01`,
-        observed_at: `${year}-12-31T23:59:59.000Z`,
-        [metric.valueKey]: annualValue,
-        [metric.shareKey]: annualTotal > 0 ? (annualValue / annualTotal) * 100 : null,
-        source: "Ember API",
-        source_family: "Ember",
-        source_label: "Ember API",
-        connector: `ember-annual-${metricKey}`,
-        is_proxy: false,
-      };
-    })
-    .filter(Boolean);
-};
+const buildAnnualRowsForFuelSelection = (payload, metricKey, market) =>
+  getSelectedFuelTypes().flatMap((fuelType) => buildAnnualRows(payload, metricKey, market, fuelType));
 
 const buildAnnualRows = (payload, metricKey, market, fuelType) => {
   const metric = METRIC_CONFIG[metricKey];
@@ -402,7 +352,7 @@ const renderLatestSnapshot = (payload, metricKey) => {
   snapshotGeneratedAt.textContent = `Ember monthly export generated ${formatTime(payload.generatedAt)}`;
   snapshotBody.replaceChildren();
 
-  latestRowsByMarket(aggregateRowsByFuelSelection(payload.rows, metricKey)).forEach((row) => {
+  latestRowsByMarketAndFuel(filterRowsByFuelSelection(payload.rows)).forEach((row) => {
     const tableRow = document.createElement("tr");
     tableRow.innerHTML = `
       <td>${row.market}</td>
@@ -454,6 +404,8 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
   const metric = METRIC_CONFIG[metricKey];
   const display = DISPLAY_CONFIG[displayKey];
   const isAnnual = cadenceKey === "annual";
+  const selectedFuels = getSelectedFuelTypes();
+  const hasMultipleFuels = selectedFuels.length > 1;
 
   seriesChart.replaceChildren();
   hideSeriesTooltip();
@@ -466,7 +418,7 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
 
   const width = 960;
   const height = 320;
-  const margin = { top: 28, right: 20, bottom: 48, left: 96 };
+  const margin = { top: 28, right: hasMultipleFuels ? 140 : 20, bottom: 48, left: 96 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
   const buckets = isAnnual
@@ -589,100 +541,43 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
   });
 
   if (isAnnual) {
-    const color = getYearColor(Number(rows[rows.length - 1]?.bucket_start.slice(0, 4)) || 2025);
-    const linePoints = rows
-      .filter((row) => Number.isFinite(display.valueForRow(row, metric)))
-      .map((row) => `${xForRow(row)},${yForValue(display.valueForRow(row, metric))}`)
-      .join(" ");
-
-    if (linePoints) {
-      plot.append(
-        createSvgNode("polyline", {
-          points: linePoints,
-          fill: "none",
-          stroke: color,
-          "stroke-width": 4,
-          "stroke-linejoin": "round",
-          "stroke-linecap": "round",
-        })
-      );
-    }
+    const byFuel = new Map();
 
     rows.forEach((row) => {
-      const plottedValue = display.valueForRow(row, metric);
-
-      if (!Number.isFinite(plottedValue)) {
-        return;
+      if (!byFuel.has(row.fuel_type)) {
+        byFuel.set(row.fuel_type, []);
       }
-
-      const x = xForRow(row);
-      const y = yForValue(plottedValue);
-      const circle = createSvgNode("circle", {
-        cx: x,
-        cy: y,
-        r: 4.5,
-        fill: color,
-        stroke: "#fff",
-        "stroke-width": 2,
-        tabindex: 0,
-      });
-
-      const title = createSvgNode("title");
-      title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${row.bucket_start.slice(0, 4)}`;
-      circle.append(title);
-      circle.addEventListener("mouseenter", () => showSeriesTooltip({ row, metric, x, y }));
-      circle.addEventListener("focus", () => showSeriesTooltip({ row, metric, x, y }));
-      circle.addEventListener("mouseleave", hideSeriesTooltip);
-      circle.addEventListener("blur", hideSeriesTooltip);
-      plot.append(circle);
+      byFuel.get(row.fuel_type).push(row);
     });
 
-    renderSeriesLegend([], () => {});
-    seriesSummary.hidden = true;
-    return;
-  }
-
-  const legendItems = [];
-
-  Array.from(byYear.keys())
-    .sort((a, b) => a - b)
-    .forEach((year) => {
-      const yearRows = byYear.get(year);
-      const color = getYearColor(year);
-
-      legendItems.push({ label: String(year), color, hidden: hiddenYears.has(year) });
-
-      if (hiddenYears.has(year)) {
-        return;
-      }
-
-      const linePoints = yearRows
-        .filter((row) => Number.isFinite(display.valueForRow(row, metric)))
-        .map((row) => `${xForRow(row)},${yForValue(display.valueForRow(row, metric))}`)
-        .join(" ");
+    selectedFuels.forEach((fuelType, fuelIndex) => {
+      const fuelRows = (byFuel.get(fuelType) ?? [])
+        .slice()
+        .sort((a, b) => a.bucket_start.localeCompare(b.bucket_start))
+        .filter((row) => Number.isFinite(display.valueForRow(row, metric)));
+      const color = YEAR_PALETTE[fuelIndex % YEAR_PALETTE.length];
+      const dashArray = getFuelDashArray(fuelType);
+      const linePoints = fuelRows.map((row) => `${xForRow(row)},${yForValue(display.valueForRow(row, metric))}`).join(" ");
 
       if (!linePoints) {
         return;
       }
 
-      plot.append(
-        createSvgNode("polyline", {
-          points: linePoints,
-          fill: "none",
-          stroke: color,
-          "stroke-width": 4,
-          "stroke-linejoin": "round",
-          "stroke-linecap": "round",
-        })
-      );
+      const line = createSvgNode("polyline", {
+        points: linePoints,
+        fill: "none",
+        stroke: color,
+        "stroke-width": 4,
+        "stroke-linejoin": "round",
+        "stroke-linecap": "round",
+      });
+      if (dashArray) {
+        line.setAttribute("stroke-dasharray", dashArray);
+      }
+      plot.append(line);
 
-      yearRows.forEach((row) => {
+      fuelRows.forEach((row) => {
         const plottedValue = display.valueForRow(row, metric);
-
-        if (!Number.isFinite(plottedValue)) {
-          return;
-        }
-
         const x = xForRow(row);
         const y = yForValue(plottedValue);
         const circle = createSvgNode("circle", {
@@ -696,9 +591,7 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
         });
 
         const title = createSvgNode("title");
-        title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${formatBucketLabel(
-          row.bucket_start
-        )}`;
+        title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${row.bucket_start.slice(0, 4)}`;
         circle.append(title);
         circle.addEventListener("mouseenter", () => showSeriesTooltip({ row, metric, x, y }));
         circle.addEventListener("focus", () => showSeriesTooltip({ row, metric, x, y }));
@@ -706,7 +599,111 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
         circle.addEventListener("blur", hideSeriesTooltip);
         plot.append(circle);
       });
+
+      if (hasMultipleFuels) {
+        const lastRow = fuelRows[fuelRows.length - 1];
+        const label = createSvgNode("text", {
+          x: xForRow(lastRow) + 10,
+          y: yForValue(display.valueForRow(lastRow, metric)) + 4,
+          fill: color,
+          "font-size": 11,
+          "font-family": "IBM Plex Mono, monospace",
+        });
+        label.textContent = fuelType;
+        plot.append(label);
+      }
     });
+
+    renderSeriesLegend([], () => {});
+    seriesSummary.hidden = true;
+    return;
+  }
+
+  const legendItems = [];
+  const seriesRows = new Map();
+
+  Array.from(byYear.keys())
+    .sort((a, b) => a - b)
+    .forEach((year) => {
+      legendItems.push({ label: String(year), color: getYearColor(year), hidden: hiddenYears.has(year) });
+
+      if (hiddenYears.has(year)) {
+        return;
+      }
+
+      const yearRows = byYear.get(year).filter((row) => Number.isFinite(display.valueForRow(row, metric)));
+
+      if (hasMultipleFuels) {
+        selectedFuels.forEach((fuelType) => {
+          const fuelRows = yearRows.filter((row) => row.fuel_type === fuelType);
+          if (fuelRows.length) {
+            seriesRows.set(`${fuelType}__${year}`, fuelRows);
+          }
+        });
+      } else if (yearRows.length) {
+        seriesRows.set(String(year), yearRows);
+      }
+    });
+
+  Array.from(seriesRows.entries()).forEach(([seriesKey, seriesData]) => {
+    const firstRow = seriesData[0];
+    const year = getRowYear(firstRow);
+    const color = getYearColor(year);
+    const dashArray = hasMultipleFuels ? getFuelDashArray(firstRow.fuel_type) : null;
+    const linePoints = seriesData.map((row) => `${xForRow(row)},${yForValue(display.valueForRow(row, metric))}`).join(" ");
+
+    const line = createSvgNode("polyline", {
+      points: linePoints,
+      fill: "none",
+      stroke: color,
+      "stroke-width": 4,
+      "stroke-linejoin": "round",
+      "stroke-linecap": "round",
+    });
+    if (dashArray) {
+      line.setAttribute("stroke-dasharray", dashArray);
+    }
+    plot.append(line);
+
+    seriesData.forEach((row) => {
+      const plottedValue = display.valueForRow(row, metric);
+      const x = xForRow(row);
+      const y = yForValue(plottedValue);
+      const circle = createSvgNode("circle", {
+        cx: x,
+        cy: y,
+        r: 4.5,
+        fill: color,
+        stroke: "#fff",
+        "stroke-width": 2,
+        tabindex: 0,
+      });
+
+      const title = createSvgNode("title");
+      title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${formatBucketLabel(
+        row.bucket_start
+      )}`;
+      circle.append(title);
+      circle.addEventListener("mouseenter", () => showSeriesTooltip({ row, metric, x, y }));
+      circle.addEventListener("focus", () => showSeriesTooltip({ row, metric, x, y }));
+      circle.addEventListener("mouseleave", hideSeriesTooltip);
+      circle.addEventListener("blur", hideSeriesTooltip);
+      plot.append(circle);
+    });
+
+    if (hasMultipleFuels) {
+      const lastRow = seriesData[seriesData.length - 1];
+      const label = createSvgNode("text", {
+        x: xForRow(lastRow) + 10,
+        y: yForValue(display.valueForRow(lastRow, metric)) + 4,
+        fill: color,
+        "font-size": 11,
+        "font-family": "IBM Plex Mono, monospace",
+      });
+      label.textContent = getMonthlySeriesLabel(lastRow, true);
+      plot.append(label);
+    }
+  });
 
   renderSeriesLegend(legendItems, toggleYear);
   seriesSummary.hidden = true;
@@ -819,12 +816,10 @@ const renderSeriesControls = (datasets) => {
 
   const refreshSeries = () => {
     const activePayload = datasets[seriesMetric.value];
-    const monthlyRows = aggregateRowsByFuelSelection(activePayload.rows ?? [], seriesMetric.value);
-    const isTotalSelection = selectedFuelTypes.size === 1 && selectedFuelTypes.has("Total generation");
-    const fuelLabel = getCombinedFuelLabel();
+    const monthlyRows = filterRowsByFuelSelection(activePayload.rows ?? []);
     const filteredRows =
       seriesCadence.value === "annual"
-        ? buildAnnualRowsFromMonthlyRows(activePayload, monthlyRows, seriesMetric.value, seriesMarket.value, fuelLabel, isTotalSelection)
+        ? buildAnnualRowsForFuelSelection(activePayload, seriesMetric.value, seriesMarket.value)
         : monthlyRows.filter((row) => row.market === seriesMarket.value);
 
     hiddenYears = seriesCadence.value === "annual" ? new Set() : getDefaultHiddenYears(filteredRows);
