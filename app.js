@@ -46,7 +46,10 @@ const getYAxisMax = (maxValue) => {
   }
 
   const rawStep = maxValue / 4;
-  const step = Math.ceil(rawStep / 5) * 5;
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalized = rawStep / magnitude;
+  const niceNormalizedStep = [1, 1.5, 2, 2.5, 5, 10].find((candidate) => normalized <= candidate) ?? 10;
+  const step = niceNormalizedStep * magnitude;
   return step * 4;
 };
 
