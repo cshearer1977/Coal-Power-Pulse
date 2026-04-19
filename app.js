@@ -28,10 +28,12 @@ const formatAxisValue = (value, yMax, suffix = "") => {
     maximumFractionDigits = 1;
   }
 
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  }).format(value) + suffix;
+  return (
+    new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits,
+    }).format(value) + suffix
+  );
 };
 
 const formatBucketLabel = (value) =>
@@ -59,6 +61,7 @@ const snapshotBody = document.querySelector("#snapshot-body");
 const snapshotGeneratedAt = document.querySelector("#snapshot-generated-at");
 const coverageGeneratedAt = document.querySelector("#coverage-generated-at");
 const seriesMetric = document.querySelector("#series-metric");
+const seriesCadence = document.querySelector("#series-cadence");
 const seriesDisplay = document.querySelector("#series-display");
 const seriesMarket = document.querySelector("#series-market");
 const seriesFuel = document.querySelector("#series-fuel");
@@ -71,6 +74,7 @@ const START_YEAR_LABEL = "January 2020";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const METRIC_ORDER = ["generation", "emissions"];
+const CADENCE_ORDER = ["monthly", "annual"];
 const DISPLAY_ORDER = ["value", "share"];
 const FUEL_ORDER = ["Coal", "Gas", "Solar", "Solar + Wind", "Wind", "Hydro", "Nuclear", "Total generation"];
 const YEAR_PALETTE = [
@@ -91,7 +95,6 @@ const METRIC_CONFIG = {
     unit: "TWh",
     valueKey: "power_generation_twh",
     shareKey: "power_share_pct",
-    sourcePath: "data/ember-monthly-series.json",
   },
   emissions: {
     label: "Power sector emissions",
@@ -99,8 +102,12 @@ const METRIC_CONFIG = {
     unit: "MtCO2",
     valueKey: "power_sector_emissions_mtco2",
     shareKey: "emissions_share_pct",
-    sourcePath: "data/ember-monthly-emissions-series.json",
   },
+};
+
+const CADENCE_CONFIG = {
+  monthly: { label: "Monthly" },
+  annual: { label: "Annual" },
 };
 
 const DISPLAY_CONFIG = {
@@ -162,6 +169,54 @@ const groupMonthlyRowsByYear = (rows) => {
   return grouped;
 };
 
+const buildAnnualRows = (payload, metricKey, market, fuelType) => {
+  const metric = METRIC_CONFIG[metricKey];
+  const marketRows = (payload.rows ?? []).filter((row) => row.market === market);
+  const years = Array.from(new Set(marketRows.map((row) => row.bucket_start.slice(0, 4)))).sort();
+
+  return years
+    .map((year) => {
+      const fuelRows = marketRows.filter(
+        (row) => row.fuel_type === fuelType && row.bucket_start.startsWith(`${year}-`)
+      );
+      const totalRows =
+        fuelType === "Total generation"
+          ? fuelRows
+          : marketRows.filter(
+              (row) => row.fuel_type === "Total generation" && row.bucket_start.startsWith(`${year}-`)
+            );
+
+      if (fuelRows.length !== 12 || totalRows.length !== 12) {
+        return null;
+      }
+
+      const fuelValues = fuelRows.map((row) => row[metric.valueKey]);
+      const totalValues = totalRows.map((row) => row[metric.valueKey]);
+
+      if (!fuelValues.every(Number.isFinite) || !totalValues.every(Number.isFinite)) {
+        return null;
+      }
+
+      const annualValue = fuelValues.reduce((sum, value) => sum + value, 0);
+      const annualTotal = totalValues.reduce((sum, value) => sum + value, 0);
+
+      return {
+        market,
+        fuel_type: fuelType,
+        bucket_start: `${year}-01-01`,
+        observed_at: `${year}-12-31T23:59:59.000Z`,
+        [metric.valueKey]: annualValue,
+        [metric.shareKey]: annualTotal > 0 ? (annualValue / annualTotal) * 100 : null,
+        source: "Ember API",
+        source_family: "Ember",
+        source_label: "Ember API",
+        connector: `ember-annual-${metricKey}`,
+        is_proxy: false,
+      };
+    })
+    .filter(Boolean);
+};
+
 const latestRowsByMarket = (rows) => {
   const byMarket = new Map();
 
@@ -204,7 +259,7 @@ const showSeriesTooltip = ({ row, metric, x, y }) => {
   seriesTooltip.innerHTML = `
     <strong>${row.market}</strong>
     <div>Fuel: ${row.fuel_type}</div>
-    <div>Month of ${formatBucketLabel(row.bucket_start)}</div>
+    <div>Period: ${formatBucketLabel(row.bucket_start)}</div>
     <div>${metric.label}: ${formatNumber(row[metric.valueKey])} ${metric.unit}</div>
     <div>Share: ${formatPct(row[metric.shareKey])}</div>
     <div>Source: Ember API</div>
@@ -274,9 +329,10 @@ const renderCoverage = (payload) => {
   });
 };
 
-const renderSeriesChart = (rows, metricKey, displayKey) => {
+const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
   const metric = METRIC_CONFIG[metricKey];
   const display = DISPLAY_CONFIG[displayKey];
+  const isAnnual = cadenceKey === "annual";
 
   seriesChart.replaceChildren();
   hideSeriesTooltip();
@@ -292,11 +348,13 @@ const renderSeriesChart = (rows, metricKey, displayKey) => {
   const margin = { top: 28, right: 20, bottom: 48, left: 96 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
-  const buckets = MONTH_LABELS.map((_, index) => index);
+  const buckets = isAnnual
+    ? Array.from(new Set(rows.map((row) => row.bucket_start.slice(0, 4)))).sort()
+    : MONTH_LABELS.map((_, index) => index);
   const bucketIndex = new Map(buckets.map((bucket, index) => [bucket, index]));
-  const byYear = groupMonthlyRowsByYear(rows);
+  const byYear = isAnnual ? new Map() : groupMonthlyRowsByYear(rows);
   const visibleYears = Array.from(byYear.keys()).filter((year) => !hiddenYears.has(year));
-  const visibleRows = rows.filter((row) => visibleYears.includes(getRowYear(row)));
+  const visibleRows = isAnnual ? rows : rows.filter((row) => visibleYears.includes(getRowYear(row)));
   const values = visibleRows.map((row) => display.valueForRow(row, metric)).filter((value) => Number.isFinite(value));
 
   const toggleYear = (label) => {
@@ -307,26 +365,29 @@ const renderSeriesChart = (rows, metricKey, displayKey) => {
       hiddenYears.add(year);
     }
 
-    renderSeriesChart(rows, metricKey, displayKey);
+    renderSeriesChart(rows, metricKey, displayKey, cadenceKey);
   };
 
   if (!values.length) {
-    const legendItems = Array.from(byYear.keys())
-      .sort((a, b) => a - b)
-      .map((year) => ({ label: String(year), color: getYearColor(year), hidden: hiddenYears.has(year) }));
+    if (!isAnnual) {
+      const legendItems = Array.from(byYear.keys())
+        .sort((a, b) => a - b)
+        .map((year) => ({ label: String(year), color: getYearColor(year), hidden: hiddenYears.has(year) }));
 
-    renderSeriesLegend(legendItems, toggleYear);
+      renderSeriesLegend(legendItems, toggleYear);
+    } else {
+      renderSeriesLegend([], () => {});
+    }
     seriesSummary.hidden = true;
     return;
   }
 
   const maxValue = Math.max(...values, 0);
   const yMax = maxValue > 0 ? maxValue * 1.1 : 1;
-  const xStep = innerWidth / (buckets.length - 1);
-  const yTicks = 4;
+  const xStep = innerWidth / (Math.max(buckets.length, 2) - 1);
 
   const xForBucket = (bucket) => margin.left + xStep * bucketIndex.get(bucket);
-  const xForRow = (row) => xForBucket(getRowMonthIndex(row));
+  const xForRow = (row) => xForBucket(isAnnual ? row.bucket_start.slice(0, 4) : getRowMonthIndex(row));
   const yForValue = (value) => margin.top + innerHeight - (value / yMax) * innerHeight;
 
   const plot = createSvgNode("g");
@@ -343,8 +404,8 @@ const renderSeriesChart = (rows, metricKey, displayKey) => {
   axisLabel.textContent = display.axisLabel(metric);
   plot.append(axisLabel);
 
-  for (let tick = 0; tick <= yTicks; tick += 1) {
-    const value = (yMax / yTicks) * tick;
+  for (let tick = 0; tick <= 4; tick += 1) {
+    const value = (yMax / 4) * tick;
     const y = yForValue(value);
     plot.append(
       createSvgNode("line", {
@@ -402,9 +463,63 @@ const renderSeriesChart = (rows, metricKey, displayKey) => {
       "font-size": 12,
       "font-family": "IBM Plex Mono, monospace",
     });
-    label.textContent = MONTH_LABELS[bucket];
+    label.textContent = isAnnual ? bucket : MONTH_LABELS[bucket];
     plot.append(label);
   });
+
+  if (isAnnual) {
+    const color = getYearColor(Number(rows[rows.length - 1]?.bucket_start.slice(0, 4)) || 2025);
+    const linePoints = rows
+      .filter((row) => Number.isFinite(display.valueForRow(row, metric)))
+      .map((row) => `${xForRow(row)},${yForValue(display.valueForRow(row, metric))}`)
+      .join(" ");
+
+    if (linePoints) {
+      plot.append(
+        createSvgNode("polyline", {
+          points: linePoints,
+          fill: "none",
+          stroke: color,
+          "stroke-width": 4,
+          "stroke-linejoin": "round",
+          "stroke-linecap": "round",
+        })
+      );
+    }
+
+    rows.forEach((row) => {
+      const plottedValue = display.valueForRow(row, metric);
+
+      if (!Number.isFinite(plottedValue)) {
+        return;
+      }
+
+      const x = xForRow(row);
+      const y = yForValue(plottedValue);
+      const circle = createSvgNode("circle", {
+        cx: x,
+        cy: y,
+        r: 4.5,
+        fill: color,
+        stroke: "#fff",
+        "stroke-width": 2,
+        tabindex: 0,
+      });
+
+      const title = createSvgNode("title");
+      title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${row.bucket_start.slice(0, 4)}`;
+      circle.append(title);
+      circle.addEventListener("mouseenter", () => showSeriesTooltip({ row, metric, x, y }));
+      circle.addEventListener("focus", () => showSeriesTooltip({ row, metric, x, y }));
+      circle.addEventListener("mouseleave", hideSeriesTooltip);
+      circle.addEventListener("blur", hideSeriesTooltip);
+      plot.append(circle);
+    });
+
+    renderSeriesLegend([], () => {});
+    seriesSummary.hidden = true;
+    return;
+  }
 
   const legendItems = [];
 
@@ -460,7 +575,9 @@ const renderSeriesChart = (rows, metricKey, displayKey) => {
         });
 
         const title = createSvgNode("title");
-        title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${formatBucketLabel(row.bucket_start)}`;
+        title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${formatBucketLabel(
+          row.bucket_start
+        )}`;
         circle.append(title);
         circle.addEventListener("mouseenter", () => showSeriesTooltip({ row, metric, x, y }));
         circle.addEventListener("focus", () => showSeriesTooltip({ row, metric, x, y }));
@@ -478,6 +595,7 @@ const renderSeriesControls = (datasets) => {
   const generationPayload = datasets.generation;
 
   seriesMetric.replaceChildren();
+  seriesCadence.replaceChildren();
   seriesDisplay.replaceChildren();
   seriesMarket.replaceChildren();
   seriesFuel.replaceChildren();
@@ -499,6 +617,13 @@ const renderSeriesControls = (datasets) => {
     option.value = metricKey;
     option.textContent = METRIC_CONFIG[metricKey].shortLabel;
     seriesMetric.append(option);
+  });
+
+  CADENCE_ORDER.forEach((cadenceKey) => {
+    const option = document.createElement("option");
+    option.value = cadenceKey;
+    option.textContent = CADENCE_CONFIG[cadenceKey].label;
+    seriesCadence.append(option);
   });
 
   DISPLAY_ORDER.forEach((displayKey) => {
@@ -523,6 +648,7 @@ const renderSeriesControls = (datasets) => {
   });
 
   seriesMetric.value = "generation";
+  seriesCadence.value = "monthly";
   seriesDisplay.value = "value";
   seriesMarket.value = markets.includes("World")
     ? "World"
@@ -533,18 +659,22 @@ const renderSeriesControls = (datasets) => {
 
   const refreshSeries = () => {
     const activePayload = datasets[seriesMetric.value];
-    const filteredRows = (activePayload.rows ?? []).filter(
-      (row) => row.market === seriesMarket.value && row.fuel_type === seriesFuel.value
-    );
+    const filteredRows =
+      seriesCadence.value === "annual"
+        ? buildAnnualRows(activePayload, seriesMetric.value, seriesMarket.value, seriesFuel.value)
+        : (activePayload.rows ?? []).filter(
+            (row) => row.market === seriesMarket.value && row.fuel_type === seriesFuel.value
+          );
 
-    hiddenYears = getDefaultHiddenYears(filteredRows);
-    renderSeriesChart(filteredRows, seriesMetric.value, seriesDisplay.value);
+    hiddenYears = seriesCadence.value === "annual" ? new Set() : getDefaultHiddenYears(filteredRows);
+    renderSeriesChart(filteredRows, seriesMetric.value, seriesDisplay.value, seriesCadence.value);
     renderLatestSnapshot(activePayload, seriesMetric.value, seriesFuel.value);
     renderCoverage(activePayload);
   };
 
   refreshSeries();
   seriesMetric.addEventListener("change", refreshSeries);
+  seriesCadence.addEventListener("change", refreshSeries);
   seriesDisplay.addEventListener("change", refreshSeries);
   seriesMarket.addEventListener("change", refreshSeries);
   seriesFuel.addEventListener("change", refreshSeries);
