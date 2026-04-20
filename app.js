@@ -119,6 +119,7 @@ const ytdIncreasing = document.querySelector("#ytd-increasing");
 const ytdDecreasing = document.querySelector("#ytd-decreasing");
 const ytdSame = document.querySelector("#ytd-same");
 const ytdCountryTotal = document.querySelector("#ytd-country-total");
+const ytdTooltip = document.querySelector("#ytd-tooltip");
 const seriesMetric = document.querySelector("#series-metric");
 const seriesCadence = document.querySelector("#series-cadence");
 const seriesDisplay = document.querySelector("#series-display");
@@ -373,7 +374,7 @@ const getLatestAnnualChangeByMarketAndFuel = (payload, metricKey) => {
 };
 
 const renderYtdStats = (payload) => {
-  if (!ytdStatsGrid || !ytdFuel || !ytdIncreasing || !ytdDecreasing || !ytdSame || !ytdCountryTotal) {
+  if (!ytdStatsGrid || !ytdFuel || !ytdIncreasing || !ytdDecreasing || !ytdSame || !ytdCountryTotal || !ytdTooltip) {
     return;
   }
 
@@ -401,6 +402,29 @@ const renderYtdStats = (payload) => {
     });
   const markets = Array.from(new Set((payload.rows ?? []).map((row) => row.market))).filter((market) => market !== "World");
   const marketMeta = new Map((payload.markets ?? []).map((market) => [market.name, market]));
+  const showYtdTooltip = (event, row) => {
+    const containerBounds = ytdTooltip.parentElement.getBoundingClientRect();
+    const targetBounds = event.currentTarget.getBoundingClientRect();
+    const comparisonLabel = row.period_label?.replace("2026", "2025") ?? "Comparable 2025";
+    const differenceValue =
+      Number.isFinite(row.power_generation_twh) && Number.isFinite(row.comparison_value)
+        ? row.power_generation_twh - row.comparison_value
+        : null;
+
+    ytdTooltip.innerHTML = `
+      <strong>${row.market}</strong>
+      <div>${row.period_label}: ${formatNumber(row.power_generation_twh)} TWh</div>
+      <div>${comparisonLabel}: ${formatNumber(row.comparison_value)} TWh</div>
+      <div>2026-2025 difference: ${Number.isFinite(differenceValue) ? `${differenceValue > 0 ? "+" : ""}${formatNumber(differenceValue)} TWh` : "—"}</div>
+    `;
+    ytdTooltip.style.left = `${targetBounds.left - containerBounds.left + targetBounds.width / 2}px`;
+    ytdTooltip.style.top = `${targetBounds.top - containerBounds.top - 6}px`;
+    ytdTooltip.hidden = false;
+  };
+
+  const hideYtdTooltip = () => {
+    ytdTooltip.hidden = true;
+  };
 
   const renderYtdList = (container, rows) => {
     container.replaceChildren();
@@ -416,7 +440,12 @@ const renderYtdStats = (payload) => {
     rows.forEach((row) => {
       const chip = document.createElement("div");
       chip.className = "ytd-chip";
+      chip.tabIndex = 0;
       chip.innerHTML = `<span>${row.market}</span><span class="${getDeltaClassName(row.change_pct)}">(${formatDeltaPct(row.change_pct)})</span>`;
+      chip.addEventListener("mouseenter", (event) => showYtdTooltip(event, row));
+      chip.addEventListener("focus", (event) => showYtdTooltip(event, row));
+      chip.addEventListener("mouseleave", hideYtdTooltip);
+      chip.addEventListener("blur", hideYtdTooltip);
       container.append(chip);
     });
   };

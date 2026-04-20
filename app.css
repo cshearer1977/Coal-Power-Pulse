@@ -135,6 +135,7 @@ h1 {
 }
 
 .ytd-dashboard {
+  position: relative;
   margin-bottom: 18px;
   padding: 16px;
   border-radius: 18px;
@@ -171,6 +172,7 @@ h1 {
   border: 1px solid rgba(33, 28, 24, 0.08);
   color: var(--text);
   font-size: 0.88rem;
+  cursor: default;
 }
 
 .ytd-empty {
