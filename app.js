@@ -96,6 +96,18 @@ const formatAnnualCoverageLabel = (months, year) => {
   const label = `${monthNames[0]}-${monthNames[monthNames.length - 1]} ${year}`;
   return isFullYear ? label : `${label} (incomplete)`;
 };
+const formatYtdCoverageLabel = (months, year) => {
+  if (!Array.isArray(months) || !months.length) {
+    return formatAnnualPeriodLabel(`${year}-01-01`);
+  }
+
+  const monthNames = months.map((month) =>
+    new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(
+      new Date(`${year}-${month}-01T00:00:00Z`)
+    )
+  );
+  return `${monthNames[0]}-${monthNames[monthNames.length - 1]} ${year}`;
+};
 
 const compareMarkets = (a, b) => {
   if (a === "World" && b !== "World") {
@@ -405,16 +417,21 @@ const renderYtdStats = (payload) => {
   const showYtdTooltip = (event, row) => {
     const containerBounds = ytdTooltip.parentElement.getBoundingClientRect();
     const targetBounds = event.currentTarget.getBoundingClientRect();
-    const comparisonLabel = row.period_label?.replace("2026", "2025") ?? "Comparable 2025";
+    const year = row.bucket_start?.slice(0, 4) ?? "2026";
+    const previousYear = String(Number(year) - 1);
+    const periodLabel = row.current_label ?? formatYtdCoverageLabel(row.covered_months, year);
+    const comparisonLabel = row.comparison_label ?? formatYtdCoverageLabel(row.covered_months, previousYear);
+    const currentValue = row.power_generation_twh;
+    const comparisonValue = row.comparison_value;
     const differenceValue =
-      Number.isFinite(row.power_generation_twh) && Number.isFinite(row.comparison_value)
-        ? row.power_generation_twh - row.comparison_value
+      Number.isFinite(currentValue) && Number.isFinite(comparisonValue)
+        ? currentValue - comparisonValue
         : null;
 
     ytdTooltip.innerHTML = `
       <strong>${row.market}</strong>
-      <div>${row.period_label}: ${formatNumber(row.power_generation_twh)} TWh</div>
-      <div>${comparisonLabel}: ${formatNumber(row.comparison_value)} TWh</div>
+      <div>${periodLabel}: ${formatNumber(currentValue)} TWh</div>
+      <div>${comparisonLabel}: ${formatNumber(comparisonValue)} TWh</div>
       <div>2026-2025 difference: ${Number.isFinite(differenceValue) ? `${differenceValue > 0 ? "+" : ""}${formatNumber(differenceValue)} TWh` : "—"}</div>
     `;
     ytdTooltip.style.left = `${targetBounds.left - containerBounds.left + targetBounds.width / 2}px`;
@@ -458,13 +475,43 @@ const renderYtdStats = (payload) => {
       renderYtdList(ytdDecreasing, []);
       renderYtdList(ytdSame, []);
       ytdCountryTotal.textContent = "Total available countries: 0";
+      ytdCountryTotal.className = "meta-chip";
+      ytdCountryTotal.onmouseenter = null;
+      ytdCountryTotal.onfocus = null;
+      ytdCountryTotal.onmouseleave = hideYtdTooltip;
+      ytdCountryTotal.onblur = hideYtdTooltip;
+      ytdCountryTotal.tabIndex = -1;
       return;
     }
 
     renderYtdList(ytdIncreasing, summary.increasingRows);
     renderYtdList(ytdDecreasing, summary.decreasingRows);
     renderYtdList(ytdSame, summary.unchangedRows);
-    ytdCountryTotal.textContent = `Total available countries: ${summary.countryCount}`;
+    ytdCountryTotal.className = `meta-chip ${getDeltaClassName(summary.countryChangePct)}`.trim();
+    ytdCountryTotal.textContent = `Total available countries: ${summary.countryCount} (${formatDeltaPct(
+      summary.countryChangePct
+    )})`;
+    ytdCountryTotal.tabIndex = 0;
+    ytdCountryTotal.onmouseenter = (event) => showYtdTooltip(event, {
+      market: "Total available countries",
+      bucket_start: "2026-01-01",
+      covered_months: summary.countryCoveredMonths,
+      current_label: "2026 YTD total (country-level, like-for-like)",
+      comparison_label: "2025 comparable total",
+      power_generation_twh: summary.countryCurrentTotal,
+      comparison_value: summary.countryComparisonTotal,
+    });
+    ytdCountryTotal.onfocus = (event) => showYtdTooltip(event, {
+      market: "Total available countries",
+      bucket_start: "2026-01-01",
+      covered_months: summary.countryCoveredMonths,
+      current_label: "2026 YTD total (country-level, like-for-like)",
+      comparison_label: "2025 comparable total",
+      power_generation_twh: summary.countryCurrentTotal,
+      comparison_value: summary.countryComparisonTotal,
+    });
+    ytdCountryTotal.onmouseleave = hideYtdTooltip;
+    ytdCountryTotal.onblur = hideYtdTooltip;
   };
 
   fuels.forEach((fuelType) => {
@@ -486,13 +533,25 @@ const renderYtdStats = (payload) => {
     const increasingRows = increasing.slice().sort((a, b) => a.market.localeCompare(b.market));
     const decreasingRows = decreasing.slice().sort((a, b) => a.market.localeCompare(b.market));
     const unchangedRows = unchanged.slice().sort((a, b) => a.market.localeCompare(b.market));
-    const countryCount = annotatedRows.filter((row) => marketMeta.get(row.market)?.isAggregate === false).length;
+    const countryRows = annotatedRows.filter((row) => marketMeta.get(row.market)?.isAggregate === false);
+    const countryCount = countryRows.length;
+    const countryCurrentTotal = countryRows.reduce((sum, row) => sum + row.power_generation_twh, 0);
+    const countryComparisonTotal = countryRows.reduce((sum, row) => sum + row.comparison_value, 0);
+    const countryChangePct =
+      Number.isFinite(countryComparisonTotal) && countryComparisonTotal !== 0
+        ? ((countryCurrentTotal - countryComparisonTotal) / countryComparisonTotal) * 100
+        : null;
+    const countryCoveredMonths = countryRows[0]?.covered_months ?? [];
 
     ytdFuelSummaries.set(fuelType, {
       increasingRows,
       decreasingRows,
       unchangedRows,
       countryCount,
+      countryCurrentTotal,
+      countryComparisonTotal,
+      countryChangePct,
+      countryCoveredMonths,
     });
 
     const option = document.createElement("option");
