@@ -331,6 +331,37 @@ const getPriorYearRow = (rows, targetRow) => {
   );
 };
 
+const getLatestAnnualChangeByMarketAndFuel = (payload, metricKey) => {
+  const result = new Map();
+
+  Array.from(new Set((payload.rows ?? []).map((row) => row.market))).forEach((market) => {
+    getSelectedFuelTypes().forEach((fuelType) => {
+      const annualRows = buildAnnualRows(payload, metricKey, market, fuelType);
+      const latestAnnualRow = annualRows[annualRows.length - 1];
+
+      if (!latestAnnualRow) {
+        return;
+      }
+
+      const annualChange =
+        Number.isFinite(latestAnnualRow[METRIC_CONFIG[metricKey].valueKey]) &&
+        Number.isFinite(latestAnnualRow.comparison_value) &&
+        latestAnnualRow.comparison_value !== 0
+          ? ((latestAnnualRow[METRIC_CONFIG[metricKey].valueKey] - latestAnnualRow.comparison_value) /
+              latestAnnualRow.comparison_value) *
+            100
+          : null;
+
+      result.set(`${market}__${fuelType}`, {
+        change_pct: annualChange,
+        period_label: latestAnnualRow.period_label,
+      });
+    });
+  });
+
+  return result;
+};
+
 const buildAnnualRowsForFuelSelection = (payload, metricKey, market) =>
   getSelectedFuelTypes().flatMap((fuelType) => buildAnnualRows(payload, metricKey, market, fuelType));
 
@@ -476,6 +507,7 @@ const renderLatestSnapshot = (payload, metricKey) => {
   }
 
   const selectedRows = filterRowsByFuelSelection(payload.rows);
+  const latestAnnualChangeByMarketAndFuel = getLatestAnnualChangeByMarketAndFuel(payload, metricKey);
   snapshotGeneratedAt.textContent = `Ember monthly export generated ${formatTime(payload.generatedAt)}`;
   snapshotBody.replaceChildren();
 
@@ -487,6 +519,7 @@ const renderLatestSnapshot = (payload, metricKey) => {
       Number.isFinite(currentValue) && Number.isFinite(priorValue) && priorValue !== 0
         ? ((currentValue - priorValue) / priorValue) * 100
         : null;
+    const latestAnnual = latestAnnualChangeByMarketAndFuel.get(`${row.market}__${row.fuel_type}`);
     const tableRow = document.createElement("tr");
     tableRow.innerHTML = `
       <td>${row.market}</td>
@@ -496,6 +529,7 @@ const renderLatestSnapshot = (payload, metricKey) => {
       <td>${formatPct(row[metric.shareKey])}</td>
       <td>${formatTime(row.observed_at)}</td>
       <td>${formatDeltaPct(yoyChange)}</td>
+      <td title="${latestAnnual?.period_label ?? ""}">${formatDeltaPct(latestAnnual?.change_pct ?? null)}</td>
     `;
     snapshotBody.append(tableRow);
   });
