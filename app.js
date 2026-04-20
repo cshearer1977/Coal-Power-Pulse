@@ -542,8 +542,15 @@ const renderYtdStats = (payload) => {
     const unchangedRows = unchanged.slice().sort((a, b) => a.market.localeCompare(b.market));
     const countryRows = annotatedRows.filter((row) => marketMeta.get(row.market)?.isAggregate === false);
     const countryCount = countryRows.length;
+    const increasingCountries = countryRows.filter((row) => row.change_pct > SAME_CHANGE_EPSILON);
+    const decreasingCountries = countryRows.filter((row) => row.change_pct < -SAME_CHANGE_EPSILON);
+    const unchangedCountries = countryRows.filter((row) => Math.abs(row.change_pct) <= SAME_CHANGE_EPSILON);
     const countryCurrentTotal = countryRows.reduce((sum, row) => sum + row.power_generation_twh, 0);
     const countryComparisonTotal = countryRows.reduce((sum, row) => sum + row.comparison_value, 0);
+    const countryDifferenceTotal =
+      Number.isFinite(countryCurrentTotal) && Number.isFinite(countryComparisonTotal)
+        ? countryCurrentTotal - countryComparisonTotal
+        : null;
     const countryChangePct =
       Number.isFinite(countryComparisonTotal) && countryComparisonTotal !== 0
         ? ((countryCurrentTotal - countryComparisonTotal) / countryComparisonTotal) * 100
@@ -570,10 +577,16 @@ const renderYtdStats = (payload) => {
     card.className = "coverage-card";
     card.innerHTML = `
       <h3>${fuelType}</h3>
-      <div class="meta-line"><strong>Markets with 2026 data:</strong> ${annotatedRows.length}</div>
-      <div class="meta-line"><strong>Increasing use:</strong> ${increasing.length} markets (${formatDeltaPct(avg(increasing))} avg)</div>
-      <div class="meta-line"><strong>Decreasing use:</strong> ${decreasing.length} markets (${formatDeltaPct(avg(decreasing))} avg)</div>
-      <div class="meta-line"><strong>Staying the same:</strong> ${unchanged.length} markets</div>
+      <div class="meta-line"><strong>Total available countries:</strong> ${countryCount}</div>
+      <div class="meta-line"><strong>2026 generation data to date:</strong> ${formatNumber(countryCurrentTotal)} TWh</div>
+      <div class="meta-line"><strong>Comparable 2025 generation data:</strong> ${formatNumber(countryComparisonTotal)} TWh</div>
+      <div class="meta-line"><strong>2026-2025 difference:</strong> ${
+        Number.isFinite(countryDifferenceTotal) ? `${countryDifferenceTotal > 0 ? "+" : ""}${formatNumber(countryDifferenceTotal)} TWh` : "—"
+      }</div>
+      <div class="meta-line"><strong>Percent change:</strong> ${formatDeltaPct(countryChangePct)}</div>
+      <div class="meta-line"><strong>Increasing use:</strong> ${increasingCountries.length} countries (${formatDeltaPct(avg(increasingCountries))} avg)</div>
+      <div class="meta-line"><strong>Decreasing use:</strong> ${decreasingCountries.length} countries (${formatDeltaPct(avg(decreasingCountries))} avg)</div>
+      <div class="meta-line"><strong>Staying the same:</strong> ${unchangedCountries.length} countries</div>
     `;
     ytdStatsGrid.append(card);
   });
