@@ -365,30 +365,25 @@ const getPriorYearRow = (rows, targetRow) => {
 
 const SAME_CHANGE_EPSILON = 0.05;
 
-const getLatestAnnualChangeByMarketAndFuel = (payload, metricKey) => {
+const getAnnualChangeByMarketAndFuelYear = (payload, metricKey) => {
   const result = new Map();
 
   Array.from(new Set((payload.rows ?? []).map((row) => row.market))).forEach((market) => {
     getSelectedFuelTypes().forEach((fuelType) => {
       const annualRows = buildAnnualRows(payload, metricKey, market, fuelType);
-      const latestAnnualRow = annualRows[annualRows.length - 1];
+      annualRows.forEach((annualRow) => {
+        const annualChange =
+          Number.isFinite(annualRow[METRIC_CONFIG[metricKey].valueKey]) &&
+          Number.isFinite(annualRow.comparison_value) &&
+          annualRow.comparison_value !== 0
+            ? ((annualRow[METRIC_CONFIG[metricKey].valueKey] - annualRow.comparison_value) / annualRow.comparison_value) * 100
+            : null;
+        const year = annualRow.bucket_start.slice(0, 4);
 
-      if (!latestAnnualRow) {
-        return;
-      }
-
-      const annualChange =
-        Number.isFinite(latestAnnualRow[METRIC_CONFIG[metricKey].valueKey]) &&
-        Number.isFinite(latestAnnualRow.comparison_value) &&
-        latestAnnualRow.comparison_value !== 0
-          ? ((latestAnnualRow[METRIC_CONFIG[metricKey].valueKey] - latestAnnualRow.comparison_value) /
-              latestAnnualRow.comparison_value) *
-            100
-          : null;
-
-      result.set(`${market}__${fuelType}`, {
-        change_pct: annualChange,
-        period_label: latestAnnualRow.period_label,
+        result.set(`${market}__${fuelType}__${year}`, {
+          change_pct: annualChange,
+          period_label: annualRow.period_label,
+        });
       });
     });
   });
@@ -734,7 +729,7 @@ const renderLatestSnapshot = (payload, metricKey) => {
   const selectedFuels = getSelectedFuelTypes();
   const showFuelColumn = selectedFuels.length > 1;
   const selectedRows = filterRowsForDisplay(filterRowsByFuelSelection(payload.rows));
-  const latestAnnualChangeByMarketAndFuel = getLatestAnnualChangeByMarketAndFuel(payload, metricKey);
+  const annualChangeByMarketFuelYear = getAnnualChangeByMarketAndFuelYear(payload, metricKey);
   snapshotGeneratedAt.textContent = `Ember monthly export generated ${formatTime(payload.generatedAt)}`;
   if (snapshotSelection) {
     snapshotSelection.textContent = `Based on Monthly Time Series selections: ${metric.shortLabel} | ${
@@ -754,7 +749,8 @@ const renderLatestSnapshot = (payload, metricKey) => {
       Number.isFinite(currentValue) && Number.isFinite(priorValue) && priorValue !== 0
         ? ((currentValue - priorValue) / priorValue) * 100
         : null;
-    const latestAnnual = latestAnnualChangeByMarketAndFuel.get(`${row.market}__${row.fuel_type}`);
+    const annual2025 = annualChangeByMarketFuelYear.get(`${row.market}__${row.fuel_type}__2025`);
+    const annual2026 = annualChangeByMarketFuelYear.get(`${row.market}__${row.fuel_type}__2026`);
     const tableRow = document.createElement("tr");
     const fuelCell = showFuelColumn ? `<td>${row.fuel_type}</td>` : "";
     tableRow.innerHTML = `
@@ -764,7 +760,8 @@ const renderLatestSnapshot = (payload, metricKey) => {
       <td>${formatNumber(row[metric.valueKey])}</td>
       <td>${formatPct(row[metric.shareKey])}</td>
       <td class="${getDeltaClassName(yoyChange)}">${formatDeltaPct(yoyChange)}</td>
-      <td class="${getDeltaClassName(latestAnnual?.change_pct ?? null)}" title="${latestAnnual?.period_label ?? ""}">${formatDeltaPct(latestAnnual?.change_pct ?? null)}</td>
+      <td class="${getDeltaClassName(annual2025?.change_pct ?? null)}" title="${annual2025?.period_label ?? ""}">${formatDeltaPct(annual2025?.change_pct ?? null)}</td>
+      <td class="${getDeltaClassName(annual2026?.change_pct ?? null)}" title="${annual2026?.period_label ?? ""}">${formatDeltaPct(annual2026?.change_pct ?? null)}</td>
     `;
     snapshotBody.append(tableRow);
   });
