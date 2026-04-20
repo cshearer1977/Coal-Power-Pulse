@@ -676,7 +676,7 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
 
     const label = createSvgNode("text", {
       x,
-      y: (displayKey === "change" && yMin < 0 && yMax > 0 ? yForValue(0) : height - margin.bottom) + 24,
+      y: height - margin.bottom + 24,
       "text-anchor": "middle",
       fill: "#655d56",
       "font-size": 12,
@@ -742,10 +742,10 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
         }`;
         circle.append(title);
         circle.addEventListener("mouseenter", () =>
-          showSeriesTooltip({ row, metric, x, y, periodLabel: formatAnnualPeriodLabel(row.bucket_start) })
+          showSeriesTooltip({ row, metric, x, y, periodLabel: row.period_label })
         );
         circle.addEventListener("focus", () =>
-          showSeriesTooltip({ row, metric, x, y, periodLabel: formatAnnualPeriodLabel(row.bucket_start) })
+          showSeriesTooltip({ row, metric, x, y, periodLabel: row.period_label })
         );
         circle.addEventListener("mouseleave", hideSeriesTooltip);
         circle.addEventListener("blur", hideSeriesTooltip);
