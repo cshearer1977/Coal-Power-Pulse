@@ -146,7 +146,7 @@ const seriesChart = document.querySelector("#series-chart");
 const seriesTooltip = document.querySelector("#series-tooltip");
 const START_YEAR_LABEL = "January 2020";
 const DISPLAY_START_YEAR = 2020;
-const SNAPSHOT_ANNUAL_YOY_YEARS = ["2026", "2025", "2024", "2023", "2022", "2021", "2020"];
+const SNAPSHOT_ANNUAL_YOY_YEARS = ["2026", "2025"];
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
