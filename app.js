@@ -80,6 +80,20 @@ const formatBucketLabel = (value) =>
   }).format(new Date(`${value}T00:00:00Z`));
 
 const formatAnnualPeriodLabel = (value) => `Jan-Dec ${value.slice(0, 4)}`;
+const formatAnnualCoverageLabel = (months, year) => {
+  if (!Array.isArray(months) || !months.length) {
+    return formatAnnualPeriodLabel(`${year}-01-01`);
+  }
+
+  const monthNames = months.map((month) =>
+    new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(
+      new Date(`${year}-${month}-01T00:00:00Z`)
+    )
+  );
+  const isFullYear = months.length === 12 && months.every((month, index) => month === String(index + 1).padStart(2, "0"));
+  const label = `${monthNames[0]}-${monthNames[monthNames.length - 1]} ${year}`;
+  return isFullYear ? label : `${label} (incomplete)`;
+};
 
 const compareMarkets = (a, b) => {
   if (a === "World" && b !== "World") {
@@ -260,11 +274,12 @@ const annotateRowsWithPeriodChange = (rows, metricKey, cadenceKey) => {
   );
 
   return sortedRows.map((row) => {
-    const previousRow = bySeriesAndBucket.get(
-      `${row.market}__${row.fuel_type}__${shiftBucketStart(row.bucket_start, cadenceKey)}`
-    );
     const currentValue = row[metric.valueKey];
-    const previousValue = previousRow?.[metric.valueKey];
+    const previousValue =
+      cadenceKey === "annual" && Number.isFinite(row.comparison_value)
+        ? row.comparison_value
+        : bySeriesAndBucket.get(`${row.market}__${row.fuel_type}__${shiftBucketStart(row.bucket_start, cadenceKey)}`)
+            ?.[metric.valueKey];
     const changePct =
       Number.isFinite(currentValue) && Number.isFinite(previousValue) && previousValue !== 0
         ? ((currentValue - previousValue) / previousValue) * 100
@@ -326,22 +341,35 @@ const buildAnnualRows = (payload, metricKey, market, fuelType) => {
 
   return years
     .map((year) => {
-      const fuelRows = marketRows.filter(
-        (row) => row.fuel_type === fuelType && row.bucket_start.startsWith(`${year}-`)
-      );
-      const totalRows =
+      const fuelRows = marketRows
+        .filter((row) => row.fuel_type === fuelType && row.bucket_start.startsWith(`${year}-`))
+        .filter((row) => Number.isFinite(row[metric.valueKey]))
+        .sort((a, b) => a.bucket_start.localeCompare(b.bucket_start));
+      const totalRows = (
         fuelType === "Total generation"
           ? fuelRows
           : marketRows.filter(
-              (row) => row.fuel_type === "Total generation" && row.bucket_start.startsWith(`${year}-`)
-            );
+              (row) =>
+                row.fuel_type === "Total generation" &&
+                row.bucket_start.startsWith(`${year}-`) &&
+                Number.isFinite(row[metric.valueKey])
+            )
+      ).sort((a, b) => a.bucket_start.localeCompare(b.bucket_start));
 
-      if (fuelRows.length !== 12 || totalRows.length !== 12) {
+      const totalByMonth = new Map(totalRows.map((row) => [row.bucket_start.slice(5, 7), row]));
+      const comparableFuelRows = fuelRows.filter((row) => totalByMonth.has(row.bucket_start.slice(5, 7)));
+      const coveredMonths = comparableFuelRows.map((row) => row.bucket_start.slice(5, 7));
+
+      if (!coveredMonths.length) {
         return null;
       }
 
-      const fuelValues = fuelRows.map((row) => row[metric.valueKey]);
-      const totalValues = totalRows.map((row) => row[metric.valueKey]);
+      const comparableTotalRows =
+        fuelType === "Total generation"
+          ? comparableFuelRows
+          : coveredMonths.map((month) => totalByMonth.get(month));
+      const fuelValues = comparableFuelRows.map((row) => row[metric.valueKey]);
+      const totalValues = comparableTotalRows.map((row) => row[metric.valueKey]);
 
       if (!fuelValues.every(Number.isFinite) || !totalValues.every(Number.isFinite)) {
         return null;
@@ -349,6 +377,21 @@ const buildAnnualRows = (payload, metricKey, market, fuelType) => {
 
       const annualValue = fuelValues.reduce((sum, value) => sum + value, 0);
       const annualTotal = totalValues.reduce((sum, value) => sum + value, 0);
+      const previousYear = String(Number(year) - 1);
+      const previousYearFuelRows = coveredMonths
+        .map((month) =>
+          marketRows.find(
+            (row) =>
+              row.fuel_type === fuelType &&
+              row.bucket_start === `${previousYear}-${month}-01` &&
+              Number.isFinite(row[metric.valueKey])
+          )
+        )
+        .filter(Boolean);
+      const comparisonValue =
+        previousYearFuelRows.length === coveredMonths.length
+          ? previousYearFuelRows.reduce((sum, row) => sum + row[metric.valueKey], 0)
+          : null;
 
       return {
         market,
@@ -357,6 +400,9 @@ const buildAnnualRows = (payload, metricKey, market, fuelType) => {
         observed_at: `${year}-12-31T23:59:59.000Z`,
         [metric.valueKey]: annualValue,
         [metric.shareKey]: annualTotal > 0 ? (annualValue / annualTotal) * 100 : null,
+        comparison_value: comparisonValue,
+        covered_months: coveredMonths,
+        period_label: formatAnnualCoverageLabel(coveredMonths, year),
         source: "Ember API",
         source_family: "Ember",
         source_label: "Ember API",
@@ -409,7 +455,7 @@ const showSeriesTooltip = ({ row, metric, x, y, periodLabel }) => {
   seriesTooltip.innerHTML = `
     <strong>${row.market}</strong>
     <div>Fuel: ${row.fuel_type}</div>
-    <div>Period: ${periodLabel ?? formatBucketLabel(row.bucket_start)}</div>
+    <div>Period: ${periodLabel ?? row.period_label ?? formatBucketLabel(row.bucket_start)}</div>
     <div>${metric.label}: ${formatNumber(row[metric.valueKey])} ${metric.unit}</div>
     <div>Share: ${formatPct(row[metric.shareKey])}</div>
     <div>YoY Change: ${formatDeltaPct(row.change_pct)}</div>
@@ -553,6 +599,19 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
   const plot = createSvgNode("g");
   seriesChart.append(plot);
 
+  if (displayKey === "change" && yMin < 0) {
+    const zeroY = yForValue(0);
+    plot.append(
+      createSvgNode("rect", {
+        x: margin.left,
+        y: zeroY,
+        width: innerWidth,
+        height: height - margin.bottom - zeroY,
+        fill: "rgba(127, 20, 42, 0.08)",
+      })
+    );
+  }
+
   const axisLabel = createSvgNode("text", {
     x: margin.left - 12,
     y: 12,
@@ -593,9 +652,9 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
   plot.append(
     createSvgNode("line", {
       x1: margin.left,
-      y1: height - margin.bottom,
+      y1: displayKey === "change" && yMin < 0 && yMax > 0 ? yForValue(0) : height - margin.bottom,
       x2: width - margin.right,
-      y2: height - margin.bottom,
+      y2: displayKey === "change" && yMin < 0 && yMax > 0 ? yForValue(0) : height - margin.bottom,
       stroke: "rgba(33, 28, 24, 0.24)",
       "stroke-width": 1.5,
     })
@@ -607,9 +666,9 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
     plot.append(
       createSvgNode("line", {
         x1: x,
-        y1: height - margin.bottom,
+        y1: displayKey === "change" && yMin < 0 && yMax > 0 ? yForValue(0) : height - margin.bottom,
         x2: x,
-        y2: height - margin.bottom + 6,
+        y2: (displayKey === "change" && yMin < 0 && yMax > 0 ? yForValue(0) : height - margin.bottom) + 6,
         stroke: "rgba(33, 28, 24, 0.24)",
         "stroke-width": 1.5,
       })
@@ -617,7 +676,7 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
 
     const label = createSvgNode("text", {
       x,
-      y: height - margin.bottom + 24,
+      y: (displayKey === "change" && yMin < 0 && yMax > 0 ? yForValue(0) : height - margin.bottom) + 24,
       "text-anchor": "middle",
       fill: "#655d56",
       "font-size": 12,
@@ -678,9 +737,9 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
         });
 
         const title = createSvgNode("title");
-        title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${formatAnnualPeriodLabel(
-          row.bucket_start
-        )}`;
+        title.textContent = `${row.market}: ${display.formatForTooltip(row, metric)} in ${
+          row.period_label ?? formatAnnualPeriodLabel(row.bucket_start)
+        }`;
         circle.append(title);
         circle.addEventListener("mouseenter", () =>
           showSeriesTooltip({ row, metric, x, y, periodLabel: formatAnnualPeriodLabel(row.bucket_start) })
