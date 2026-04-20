@@ -38,21 +38,43 @@ const formatAxisValue = (value, yMax, suffix = "") => {
   );
 };
 
-const getYAxisMax = (maxValue) => {
-  if (!Number.isFinite(maxValue) || maxValue <= 0) {
+const getNiceStep = (rawStep) => {
+  if (!Number.isFinite(rawStep) || rawStep <= 0) {
     return 1;
   }
 
-  if (maxValue < 10) {
-    return maxValue * 1.1;
+  if (rawStep < 2.5) {
+    return rawStep;
   }
 
-  const rawStep = maxValue / 4;
   const magnitude = 10 ** Math.floor(Math.log10(rawStep));
   const normalized = rawStep / magnitude;
   const niceNormalizedStep = [1, 1.5, 2, 2.5, 5, 10].find((candidate) => normalized <= candidate) ?? 10;
-  const step = niceNormalizedStep * magnitude;
-  return step * 4;
+  return niceNormalizedStep * magnitude;
+};
+
+const getYAxisDomain = (values, displayKey) => {
+  const finiteValues = values.filter((value) => Number.isFinite(value));
+
+  if (!finiteValues.length) {
+    return { yMin: 0, yMax: 1 };
+  }
+
+  if (displayKey !== "change") {
+    const maxValue = Math.max(...finiteValues, 0);
+    return { yMin: 0, yMax: maxValue > 0 ? getNiceStep(maxValue / 4) * 4 : 1 };
+  }
+
+  const minValue = Math.min(...finiteValues);
+  const maxValue = Math.max(...finiteValues);
+  const boundedMin = Math.min(minValue, 0);
+  const boundedMax = Math.max(maxValue, 0);
+  const range = boundedMax - boundedMin || Math.max(Math.abs(boundedMax), 1);
+  const step = getNiceStep(range / 4);
+  const yMin = Math.floor(boundedMin / step) * step;
+  const yMax = Math.ceil(boundedMax / step) * step;
+
+  return yMin === yMax ? { yMin: yMin - 1, yMax: yMax + 1 } : { yMin, yMax };
 };
 
 const formatBucketLabel = (value) =>
@@ -97,7 +119,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const METRIC_ORDER = ["generation", "emissions"];
 const CADENCE_ORDER = ["monthly", "annual"];
-const DISPLAY_ORDER = ["value", "share"];
+const DISPLAY_ORDER = ["value", "share", "change"];
 const FUEL_ORDER = ["Coal", "Gas", "Solar", "Solar + Wind", "Wind", "Hydro", "Nuclear", "Total generation"];
 const YEAR_PALETTE = [
   "#016b83",
@@ -145,6 +167,12 @@ const DISPLAY_CONFIG = {
     axisLabel: () => "%",
     valueForRow: (row, metric) => row[metric.shareKey],
     formatForTooltip: (row, metric) => formatPct(row[metric.shareKey]),
+  },
+  change: {
+    label: "Change",
+    axisLabel: () => "%",
+    valueForRow: (row) => row.change_pct,
+    formatForTooltip: (row) => formatDeltaPct(row.change_pct),
   },
 };
 
@@ -211,6 +239,46 @@ const getFuelSelectionLabel = (fuelTypes) => {
 const getSelectedFuelTypes = () => availableFuelTypes.filter((fuel) => selectedFuelTypes.has(fuel));
 
 const filterRowsByFuelSelection = (rows) => rows.filter((row) => selectedFuelTypes.has(row.fuel_type));
+
+const shiftBucketStart = (bucketStart, cadenceKey) => {
+  const date = new Date(`${bucketStart}T00:00:00Z`);
+
+  if (cadenceKey === "annual") {
+    return `${date.getUTCFullYear() - 1}-01-01`;
+  }
+
+  date.setUTCMonth(date.getUTCMonth() - 1);
+  return date.toISOString().slice(0, 10);
+};
+
+const annotateRowsWithPeriodChange = (rows, metricKey, cadenceKey) => {
+  const metric = METRIC_CONFIG[metricKey];
+  const sortedRows = rows
+    .slice()
+    .sort(
+      (a, b) =>
+        a.market.localeCompare(b.market) ||
+        a.fuel_type.localeCompare(b.fuel_type) ||
+        a.bucket_start.localeCompare(b.bucket_start)
+    );
+  const bySeriesAndBucket = new Map(
+    sortedRows.map((row) => [`${row.market}__${row.fuel_type}__${row.bucket_start}`, row])
+  );
+
+  return sortedRows.map((row) => {
+    const previousRow = bySeriesAndBucket.get(
+      `${row.market}__${row.fuel_type}__${shiftBucketStart(row.bucket_start, cadenceKey)}`
+    );
+    const currentValue = row[metric.valueKey];
+    const previousValue = previousRow?.[metric.valueKey];
+    const changePct =
+      Number.isFinite(currentValue) && Number.isFinite(previousValue) && previousValue !== 0
+        ? ((currentValue - previousValue) / previousValue) * 100
+        : null;
+
+    return { ...row, change_pct: changePct };
+  });
+};
 
 const getFuelDashArray = (fuelType) => {
   const selected = getSelectedFuelTypes();
@@ -350,6 +418,7 @@ const showSeriesTooltip = ({ row, metric, x, y, periodLabel }) => {
     <div>Period: ${periodLabel ?? formatBucketLabel(row.bucket_start)}</div>
     <div>${metric.label}: ${formatNumber(row[metric.valueKey])} ${metric.unit}</div>
     <div>Share: ${formatPct(row[metric.shareKey])}</div>
+    <div>Change: ${formatDeltaPct(row.change_pct)}</div>
     <div>Source: Ember API</div>
   `;
 
@@ -480,13 +549,12 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
     return;
   }
 
-  const maxValue = Math.max(...values, 0);
-  const yMax = getYAxisMax(maxValue);
+  const { yMin, yMax } = getYAxisDomain(values, displayKey);
   const xStep = innerWidth / (Math.max(buckets.length, 2) - 1);
 
   const xForBucket = (bucket) => margin.left + xStep * bucketIndex.get(bucket);
   const xForRow = (row) => xForBucket(isAnnual ? row.bucket_start.slice(0, 4) : getRowMonthIndex(row));
-  const yForValue = (value) => margin.top + innerHeight - (value / yMax) * innerHeight;
+  const yForValue = (value) => margin.top + innerHeight - ((value - yMin) / (yMax - yMin)) * innerHeight;
 
   const plot = createSvgNode("g");
   seriesChart.append(plot);
@@ -503,7 +571,7 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
   plot.append(axisLabel);
 
   for (let tick = 0; tick <= 4; tick += 1) {
-    const value = (yMax / 4) * tick;
+    const value = yMin + ((yMax - yMin) / 4) * tick;
     const y = yForValue(value);
     plot.append(
       createSvgNode("line", {
@@ -524,7 +592,7 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
       "font-size": 12,
       "font-family": "IBM Plex Mono, monospace",
     });
-    label.textContent = formatAxisValue(value, yMax, displayKey === "share" ? "%" : "");
+    label.textContent = formatAxisValue(value, Math.max(Math.abs(yMin), Math.abs(yMax)), display.axisLabel(metric));
     plot.append(label);
   }
 
@@ -848,10 +916,11 @@ const renderSeriesControls = (datasets) => {
   const refreshSeries = () => {
     const activePayload = datasets[seriesMetric.value];
     const monthlyRows = filterRowsByFuelSelection(activePayload.rows ?? []);
-    const filteredRows =
+    const baseRows =
       seriesCadence.value === "annual"
         ? buildAnnualRowsForFuelSelection(activePayload, seriesMetric.value, seriesMarket.value)
         : monthlyRows.filter((row) => row.market === seriesMarket.value);
+    const filteredRows = annotateRowsWithPeriodChange(baseRows, seriesMetric.value, seriesCadence.value);
 
     hiddenYears = seriesCadence.value === "annual" ? new Set() : getDefaultHiddenYears(filteredRows);
     renderSeriesChart(filteredRows, seriesMetric.value, seriesDisplay.value, seriesCadence.value);
