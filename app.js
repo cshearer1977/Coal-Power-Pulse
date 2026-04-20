@@ -9,6 +9,8 @@ const formatNumber = (value) =>
 const formatPct = (value) => (Number.isFinite(value) ? `${value.toFixed(1)}%` : "—");
 const formatDeltaPct = (value) =>
   Number.isFinite(value) ? `${value > 0 ? "+" : ""}${value.toFixed(1)}%` : "—";
+const getDeltaClassName = (value) =>
+  Number.isFinite(value) ? (value > 0 ? "delta-positive" : value < 0 ? "delta-negative" : "delta-neutral") : "";
 
 const formatTime = (value) =>
   new Intl.DateTimeFormat("en-US", {
@@ -528,8 +530,8 @@ const renderLatestSnapshot = (payload, metricKey) => {
       <td>${formatNumber(row[metric.valueKey])}</td>
       <td>${formatPct(row[metric.shareKey])}</td>
       <td>${formatTime(row.observed_at)}</td>
-      <td>${formatDeltaPct(yoyChange)}</td>
-      <td title="${latestAnnual?.period_label ?? ""}">${formatDeltaPct(latestAnnual?.change_pct ?? null)}</td>
+      <td class="${getDeltaClassName(yoyChange)}">${formatDeltaPct(yoyChange)}</td>
+      <td class="${getDeltaClassName(latestAnnual?.change_pct ?? null)}" title="${latestAnnual?.period_label ?? ""}">${formatDeltaPct(latestAnnual?.change_pct ?? null)}</td>
     `;
     snapshotBody.append(tableRow);
   });

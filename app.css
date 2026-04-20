@@ -180,6 +180,21 @@ h1 {
   overflow: auto;
 }
 
+.delta-positive {
+  color: #016b83;
+  font-weight: 600;
+}
+
+.delta-negative {
+  color: #7f142a;
+  font-weight: 600;
+}
+
+.delta-neutral {
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .weekly-meta {
   display: flex;
   flex-wrap: wrap;
