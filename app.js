@@ -707,15 +707,15 @@ const renderSeriesLegend = (items, toggleYear) => {
 
 const showSeriesTooltip = ({ row, metric, x, y, periodLabel }) => {
   const chartBounds = seriesChart.getBoundingClientRect();
+  const tooltipMetricLabel = metric.shortLabel === "CO2 emissions" ? "CO2 emissions" : metric.label;
 
   seriesTooltip.innerHTML = `
     <strong>${row.market}</strong>
     <div>Fuel: ${row.fuel_type}</div>
     <div>Period: ${periodLabel ?? row.period_label ?? formatBucketLabel(row.bucket_start)}</div>
-    <div>${metric.label}: ${formatNumber(row[metric.valueKey])} ${metric.unit}</div>
+    <div>${tooltipMetricLabel}: ${formatNumber(row[metric.valueKey])} ${metric.unit}</div>
     <div>Share: ${formatPct(row[metric.shareKey])}</div>
     <div>YoY Change: ${formatDeltaPct(row.change_pct)}</div>
-    <div>Source: Ember API</div>
   `;
 
   seriesTooltip.style.left = `${(x / 960) * chartBounds.width + 12}px`;
