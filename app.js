@@ -346,7 +346,7 @@ const latestRowsByMarketAndFuel = (rows) => {
 
   return Array.from(byKey.values()).sort(
     (a, b) =>
-      a.market.localeCompare(b.market) ||
+      compareMarkets(a.market, b.market) ||
       FUEL_ORDER.indexOf(a.fuel_type) - FUEL_ORDER.indexOf(b.fuel_type) ||
       a.fuel_type.localeCompare(b.fuel_type)
   );
