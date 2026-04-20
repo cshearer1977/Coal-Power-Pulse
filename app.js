@@ -124,6 +124,8 @@ const compareMarkets = (a, b) => {
 const schemaPreview = document.querySelector("#schema-preview");
 const snapshotBody = document.querySelector("#snapshot-body");
 const snapshotGeneratedAt = document.querySelector("#snapshot-generated-at");
+const snapshotSelection = document.querySelector("#snapshot-selection");
+const snapshotFuelHeader = document.querySelector("#snapshot-fuel-header");
 const ytdStatsGrid = document.querySelector("#ytd-stats-grid");
 const ytdGeneratedAt = document.querySelector("#ytd-generated-at");
 const ytdFuel = document.querySelector("#ytd-fuel");
@@ -173,7 +175,7 @@ const METRIC_CONFIG = {
   },
   emissions: {
     label: "Power sector emissions",
-    shortLabel: "Emissions",
+    shortLabel: "CO2 emissions",
     unit: "MtCO2",
     valueKey: "power_sector_emissions_mtco2",
     shareKey: "emissions_share_pct",
@@ -193,7 +195,7 @@ const DISPLAY_CONFIG = {
     formatForTooltip: (row, metric) => `${formatNumber(row[metric.valueKey])} ${metric.unit}`,
   },
   share: {
-    label: "Percent share",
+    label: "Percent fuel share",
     axisLabel: () => "%",
     valueForRow: (row, metric) => row[metric.shareKey],
     formatForTooltip: (row, metric) => formatPct(row[metric.shareKey]),
@@ -729,9 +731,19 @@ const renderLatestSnapshot = (payload, metricKey) => {
     return;
   }
 
+  const selectedFuels = getSelectedFuelTypes();
+  const showFuelColumn = selectedFuels.length > 1;
   const selectedRows = filterRowsForDisplay(filterRowsByFuelSelection(payload.rows));
   const latestAnnualChangeByMarketAndFuel = getLatestAnnualChangeByMarketAndFuel(payload, metricKey);
   snapshotGeneratedAt.textContent = `Ember monthly export generated ${formatTime(payload.generatedAt)}`;
+  if (snapshotSelection) {
+    snapshotSelection.textContent = `Based on Monthly Time Series selections: ${metric.shortLabel} | ${
+      selectedFuels.join(", ") || "No fuels selected"
+    }`;
+  }
+  if (snapshotFuelHeader) {
+    snapshotFuelHeader.hidden = !showFuelColumn;
+  }
   snapshotBody.replaceChildren();
 
   latestRowsByMarketAndFuel(selectedRows).forEach((row) => {
@@ -744,10 +756,10 @@ const renderLatestSnapshot = (payload, metricKey) => {
         : null;
     const latestAnnual = latestAnnualChangeByMarketAndFuel.get(`${row.market}__${row.fuel_type}`);
     const tableRow = document.createElement("tr");
+    const fuelCell = showFuelColumn ? `<td>${row.fuel_type}</td>` : "";
     tableRow.innerHTML = `
       <td>${row.market}</td>
-      <td>${row.fuel_type}</td>
-      <td>${metric.label} (${metric.unit})</td>
+      ${fuelCell}
       <td>${row.bucket_start.slice(0, 7)}</td>
       <td>${formatNumber(row[metric.valueKey])}</td>
       <td>${formatPct(row[metric.shareKey])}</td>
@@ -836,17 +848,6 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
       })
     );
   }
-
-  const axisLabel = createSvgNode("text", {
-    x: margin.left - 12,
-    y: 12,
-    "text-anchor": "end",
-    fill: "#655d56",
-    "font-size": 12,
-    "font-family": "IBM Plex Mono, monospace",
-  });
-  axisLabel.textContent = display.axisLabel(metric);
-  plot.append(axisLabel);
 
   for (let tick = 0; tick <= 4; tick += 1) {
     const value = yMin + ((yMax - yMin) / 4) * tick;
