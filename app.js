@@ -169,7 +169,7 @@ const DISPLAY_CONFIG = {
     formatForTooltip: (row, metric) => formatPct(row[metric.shareKey]),
   },
   change: {
-    label: "Change",
+    label: "YoY change",
     axisLabel: () => "%",
     valueForRow: (row) => row.change_pct,
     formatForTooltip: (row) => formatDeltaPct(row.change_pct),
@@ -247,8 +247,7 @@ const shiftBucketStart = (bucketStart, cadenceKey) => {
     return `${date.getUTCFullYear() - 1}-01-01`;
   }
 
-  date.setUTCMonth(date.getUTCMonth() - 1);
-  return date.toISOString().slice(0, 10);
+  return `${date.getUTCFullYear() - 1}-${bucketStart.slice(5)}`;
 };
 
 const annotateRowsWithPeriodChange = (rows, metricKey, cadenceKey) => {
