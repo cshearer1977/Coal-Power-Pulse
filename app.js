@@ -176,7 +176,7 @@ const METRIC_CONFIG = {
   emissions: {
     label: "Power sector emissions",
     shortLabel: "CO2 emissions",
-    unit: "MtCO2",
+    unit: "Mt",
     valueKey: "power_sector_emissions_mtco2",
     shareKey: "emissions_share_pct",
   },
