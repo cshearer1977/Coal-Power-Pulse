@@ -124,6 +124,60 @@ h1 {
   font-size: 1rem;
 }
 
+.ytd-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 16px;
+}
+
+#ytd-fuel {
+  width: 180px;
+}
+
+.ytd-dashboard {
+  margin-bottom: 18px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(33, 28, 24, 0.08);
+}
+
+.ytd-row + .ytd-row {
+  margin-top: 12px;
+}
+
+.ytd-label {
+  margin-bottom: 6px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ytd-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ytd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(33, 28, 24, 0.08);
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.ytd-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .meta-line {
   margin-top: 6px;
   color: var(--muted);

@@ -114,6 +114,11 @@ const snapshotBody = document.querySelector("#snapshot-body");
 const snapshotGeneratedAt = document.querySelector("#snapshot-generated-at");
 const ytdStatsGrid = document.querySelector("#ytd-stats-grid");
 const ytdGeneratedAt = document.querySelector("#ytd-generated-at");
+const ytdFuel = document.querySelector("#ytd-fuel");
+const ytdIncreasing = document.querySelector("#ytd-increasing");
+const ytdDecreasing = document.querySelector("#ytd-decreasing");
+const ytdSame = document.querySelector("#ytd-same");
+const ytdCountryTotal = document.querySelector("#ytd-country-total");
 const seriesMetric = document.querySelector("#series-metric");
 const seriesCadence = document.querySelector("#series-cadence");
 const seriesDisplay = document.querySelector("#series-display");
@@ -190,6 +195,7 @@ const DISPLAY_CONFIG = {
 let hiddenYears = new Set();
 let selectedFuelTypes = new Set(["Coal"]);
 let availableFuelTypes = [];
+let ytdFuelSummaries = new Map();
 
 const createSvgNode = (tag, attributes = {}) => {
   const node = document.createElementNS(SVG_NS, tag);
@@ -367,11 +373,13 @@ const getLatestAnnualChangeByMarketAndFuel = (payload, metricKey) => {
 };
 
 const renderYtdStats = (payload) => {
-  if (!ytdStatsGrid) {
+  if (!ytdStatsGrid || !ytdFuel || !ytdIncreasing || !ytdDecreasing || !ytdSame || !ytdCountryTotal) {
     return;
   }
 
   ytdStatsGrid.replaceChildren();
+  ytdFuel.replaceChildren();
+  ytdFuelSummaries = new Map();
 
   if (!payload?.generatedAt || !Array.isArray(payload.rows)) {
     if (ytdGeneratedAt) {
@@ -392,6 +400,43 @@ const renderYtdStats = (payload) => {
       return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
     });
   const markets = Array.from(new Set((payload.rows ?? []).map((row) => row.market))).filter((market) => market !== "World");
+  const marketMeta = new Map((payload.markets ?? []).map((market) => [market.name, market]));
+
+  const renderYtdList = (container, rows) => {
+    container.replaceChildren();
+
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "ytd-empty";
+      empty.textContent = "None";
+      container.append(empty);
+      return;
+    }
+
+    rows.forEach((row) => {
+      const chip = document.createElement("div");
+      chip.className = "ytd-chip";
+      chip.innerHTML = `<span>${row.market}</span><span class="${getDeltaClassName(row.change_pct)}">(${formatDeltaPct(row.change_pct)})</span>`;
+      container.append(chip);
+    });
+  };
+
+  const refreshYtdDashboard = () => {
+    const summary = ytdFuelSummaries.get(ytdFuel.value);
+
+    if (!summary) {
+      renderYtdList(ytdIncreasing, []);
+      renderYtdList(ytdDecreasing, []);
+      renderYtdList(ytdSame, []);
+      ytdCountryTotal.textContent = "Total available countries: 0";
+      return;
+    }
+
+    renderYtdList(ytdIncreasing, summary.increasingRows);
+    renderYtdList(ytdDecreasing, summary.decreasingRows);
+    renderYtdList(ytdSame, summary.unchangedRows);
+    ytdCountryTotal.textContent = `Total available countries: ${summary.countryCount}`;
+  };
 
   fuels.forEach((fuelType) => {
     const annualRows = markets
@@ -409,6 +454,22 @@ const renderYtdStats = (payload) => {
     const unchanged = annotatedRows.filter((row) => Math.abs(row.change_pct) <= SAME_CHANGE_EPSILON);
     const avg = (rows) =>
       rows.length ? rows.reduce((sum, row) => sum + row.change_pct, 0) / rows.length : null;
+    const increasingRows = increasing.slice().sort((a, b) => a.market.localeCompare(b.market));
+    const decreasingRows = decreasing.slice().sort((a, b) => a.market.localeCompare(b.market));
+    const unchangedRows = unchanged.slice().sort((a, b) => a.market.localeCompare(b.market));
+    const countryCount = annotatedRows.filter((row) => marketMeta.get(row.market)?.isAggregate === false).length;
+
+    ytdFuelSummaries.set(fuelType, {
+      increasingRows,
+      decreasingRows,
+      unchangedRows,
+      countryCount,
+    });
+
+    const option = document.createElement("option");
+    option.value = fuelType;
+    option.textContent = fuelType;
+    ytdFuel.append(option);
 
     const card = document.createElement("article");
     card.className = "coverage-card";
@@ -421,6 +482,10 @@ const renderYtdStats = (payload) => {
     `;
     ytdStatsGrid.append(card);
   });
+
+  ytdFuel.value = fuels.includes("Coal") ? "Coal" : fuels[0] ?? "";
+  refreshYtdDashboard();
+  ytdFuel.onchange = refreshYtdDashboard;
 };
 
 const buildAnnualRowsForFuelSelection = (payload, metricKey, market) =>

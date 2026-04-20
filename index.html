@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./app.css?v=20260419e" />
+    <link rel="stylesheet" href="./app.css?v=20260419f" />
   </head>
   <body>
     <div class="page-shell">
@@ -73,6 +73,38 @@
 
         <section class="panel panel-wide">
           <div class="panel-heading">
+            <h2>YTD 2026 Stats</h2>
+            <p>Year-to-date 2026 generation changes by fuel, based on markets with 2026 data and like-for-like comparisons against the same covered months in 2025.</p>
+          </div>
+          <div class="weekly-meta">
+            <div id="ytd-generated-at" class="meta-chip">Loading YTD 2026 stats</div>
+          </div>
+          <div class="ytd-toolbar">
+            <label class="series-control" for="ytd-fuel">
+              <span>Fuel Type</span>
+              <select id="ytd-fuel"></select>
+            </label>
+          </div>
+          <div class="ytd-dashboard">
+            <div class="ytd-row">
+              <div class="ytd-label">Increasing use</div>
+              <div id="ytd-increasing" class="ytd-list"></div>
+            </div>
+            <div class="ytd-row">
+              <div class="ytd-label">Decreasing use</div>
+              <div id="ytd-decreasing" class="ytd-list"></div>
+            </div>
+            <div class="ytd-row">
+              <div class="ytd-label">Staying the same</div>
+              <div id="ytd-same" class="ytd-list"></div>
+            </div>
+            <div id="ytd-country-total" class="meta-chip"></div>
+          </div>
+          <div id="ytd-stats-grid" class="coverage-grid"></div>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-heading">
             <h2>Latest Ember Month</h2>
             <p>The latest available monthly Ember record for each country and region in the selected metric and fuel series.</p>
           </div>
@@ -101,17 +133,6 @@
 
         <section class="panel panel-wide">
           <div class="panel-heading">
-            <h2>YTD 2026 Stats</h2>
-            <p>Year-to-date 2026 generation changes by fuel, based on markets with 2026 data and like-for-like comparisons against the same covered months in 2025.</p>
-          </div>
-          <div class="weekly-meta">
-            <div id="ytd-generated-at" class="meta-chip">Loading YTD 2026 stats</div>
-          </div>
-          <div id="ytd-stats-grid" class="coverage-grid"></div>
-        </section>
-
-        <section class="panel panel-wide">
-          <div class="panel-heading">
             <h2>Normalized Schema</h2>
           </div>
           <pre id="schema-preview" class="code-block"></pre>
@@ -119,6 +140,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260419e"></script>
+    <script type="module" src="./app.js?v=20260419f"></script>
   </body>
 </html>
