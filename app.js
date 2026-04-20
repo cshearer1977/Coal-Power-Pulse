@@ -7,6 +7,8 @@ const formatNumber = (value) =>
     : "—";
 
 const formatPct = (value) => (Number.isFinite(value) ? `${value.toFixed(1)}%` : "—");
+const formatDeltaPct = (value) =>
+  Number.isFinite(value) ? `${value > 0 ? "+" : ""}${value.toFixed(1)}%` : "—";
 
 const formatTime = (value) =>
   new Intl.DateTimeFormat("en-US", {
@@ -240,6 +242,18 @@ const latestRowsByMarketAndFuel = (rows) => {
   );
 };
 
+const getPriorYearRow = (rows, targetRow) => {
+  const [year, month] = targetRow.bucket_start.slice(0, 7).split("-");
+  const priorBucket = `${Number(year) - 1}-${month}`;
+
+  return rows.find(
+    (row) =>
+      row.market === targetRow.market &&
+      row.fuel_type === targetRow.fuel_type &&
+      row.bucket_start.slice(0, 7) === priorBucket
+  );
+};
+
 const buildAnnualRowsForFuelSelection = (payload, metricKey, market) =>
   getSelectedFuelTypes().flatMap((fuelType) => buildAnnualRows(payload, metricKey, market, fuelType));
 
@@ -352,10 +366,18 @@ const renderLatestSnapshot = (payload, metricKey) => {
     return;
   }
 
+  const selectedRows = filterRowsByFuelSelection(payload.rows);
   snapshotGeneratedAt.textContent = `Ember monthly export generated ${formatTime(payload.generatedAt)}`;
   snapshotBody.replaceChildren();
 
-  latestRowsByMarketAndFuel(filterRowsByFuelSelection(payload.rows)).forEach((row) => {
+  latestRowsByMarketAndFuel(selectedRows).forEach((row) => {
+    const priorYearRow = getPriorYearRow(selectedRows, row);
+    const currentValue = row[metric.valueKey];
+    const priorValue = priorYearRow?.[metric.valueKey];
+    const yoyChange =
+      Number.isFinite(currentValue) && Number.isFinite(priorValue) && priorValue !== 0
+        ? ((currentValue - priorValue) / priorValue) * 100
+        : null;
     const tableRow = document.createElement("tr");
     tableRow.innerHTML = `
       <td>${row.market}</td>
@@ -364,7 +386,7 @@ const renderLatestSnapshot = (payload, metricKey) => {
       <td>${formatNumber(row[metric.valueKey])}</td>
       <td>${formatPct(row[metric.shareKey])}</td>
       <td>${formatTime(row.observed_at)}</td>
-      <td>Ember API</td>
+      <td>${formatDeltaPct(yoyChange)}</td>
     `;
     snapshotBody.append(tableRow);
   });
