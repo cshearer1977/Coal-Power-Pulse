@@ -532,6 +532,14 @@ th {
   letter-spacing: 0.04em;
 }
 
+.stacked-header {
+  white-space: nowrap;
+}
+
+.stacked-header span {
+  display: block;
+}
+
 .info-dot {
   position: relative;
   display: inline-flex;

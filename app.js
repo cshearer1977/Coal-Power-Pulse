@@ -146,6 +146,7 @@ const seriesChart = document.querySelector("#series-chart");
 const seriesTooltip = document.querySelector("#series-tooltip");
 const START_YEAR_LABEL = "January 2020";
 const DISPLAY_START_YEAR = 2020;
+const SNAPSHOT_ANNUAL_YOY_YEARS = ["2026", "2025", "2024", "2023", "2022", "2021", "2020"];
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -749,8 +750,12 @@ const renderLatestSnapshot = (payload, metricKey) => {
       Number.isFinite(currentValue) && Number.isFinite(priorValue) && priorValue !== 0
         ? ((currentValue - priorValue) / priorValue) * 100
         : null;
-    const annual2025 = annualChangeByMarketFuelYear.get(`${row.market}__${row.fuel_type}__2025`);
-    const annual2026 = annualChangeByMarketFuelYear.get(`${row.market}__${row.fuel_type}__2026`);
+    const annualCells = SNAPSHOT_ANNUAL_YOY_YEARS.map((year) => {
+      const annual = annualChangeByMarketFuelYear.get(`${row.market}__${row.fuel_type}__${year}`);
+      return `<td class="${getDeltaClassName(annual?.change_pct ?? null)}" title="${
+        annual?.period_label ?? ""
+      }">${formatDeltaPct(annual?.change_pct ?? null)}</td>`;
+    }).join("");
     const tableRow = document.createElement("tr");
     const fuelCell = showFuelColumn ? `<td>${row.fuel_type}</td>` : "";
     tableRow.innerHTML = `
@@ -760,8 +765,7 @@ const renderLatestSnapshot = (payload, metricKey) => {
       <td>${formatNumber(row[metric.valueKey])}</td>
       <td>${formatPct(row[metric.shareKey])}</td>
       <td class="${getDeltaClassName(yoyChange)}">${formatDeltaPct(yoyChange)}</td>
-      <td class="${getDeltaClassName(annual2025?.change_pct ?? null)}" title="${annual2025?.period_label ?? ""}">${formatDeltaPct(annual2025?.change_pct ?? null)}</td>
-      <td class="${getDeltaClassName(annual2026?.change_pct ?? null)}" title="${annual2026?.period_label ?? ""}">${formatDeltaPct(annual2026?.change_pct ?? null)}</td>
+      ${annualCells}
     `;
     snapshotBody.append(tableRow);
   });
