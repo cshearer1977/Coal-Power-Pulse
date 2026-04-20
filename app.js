@@ -124,6 +124,7 @@ const compareMarkets = (a, b) => {
 const schemaPreview = document.querySelector("#schema-preview");
 const snapshotBody = document.querySelector("#snapshot-body");
 const snapshotGeneratedAt = document.querySelector("#snapshot-generated-at");
+const snapshotFuel = document.querySelector("#snapshot-fuel");
 const ytdStatsGrid = document.querySelector("#ytd-stats-grid");
 const ytdGeneratedAt = document.querySelector("#ytd-generated-at");
 const ytdFuel = document.querySelector("#ytd-fuel");
@@ -209,6 +210,7 @@ let hiddenYears = new Set();
 let selectedFuelTypes = new Set(["Coal"]);
 let availableFuelTypes = [];
 let ytdFuelSummaries = new Map();
+let selectedSnapshotFuel = "Coal";
 
 const createSvgNode = (tag, attributes = {}) => {
   const node = document.createElementNS(SVG_NS, tag);
@@ -715,12 +717,12 @@ const showSeriesTooltip = ({ row, metric, x, y, periodLabel }) => {
 const renderLatestSnapshot = (payload, metricKey) => {
   const metric = METRIC_CONFIG[metricKey];
 
-  if (!payload?.generatedAt || !Array.isArray(payload.rows)) {
+  if (!payload?.generatedAt || !Array.isArray(payload.rows) || !snapshotFuel) {
     snapshotGeneratedAt.textContent = "Monthly export unavailable";
     return;
   }
 
-  const selectedRows = filterRowsByFuelSelection(payload.rows);
+  const selectedRows = payload.rows.filter((row) => row.fuel_type === selectedSnapshotFuel);
   const latestAnnualChangeByMarketAndFuel = getLatestAnnualChangeByMarketAndFuel(payload, metricKey);
   snapshotGeneratedAt.textContent = `Ember monthly export generated ${formatTime(payload.generatedAt)}`;
   snapshotBody.replaceChildren();
@@ -1083,6 +1085,7 @@ const renderSeriesControls = (datasets) => {
   seriesCadence.replaceChildren();
   seriesDisplay.replaceChildren();
   seriesMarket.replaceChildren();
+  snapshotFuel.replaceChildren();
 
   const markets = Array.from(new Set((generationPayload.rows ?? []).map((row) => row.market))).sort(compareMarkets);
   const fuels = (generationPayload.fuelTypes ?? []).slice().sort((a, b) => {
@@ -1125,6 +1128,13 @@ const renderSeriesControls = (datasets) => {
     seriesMarket.append(option);
   });
 
+  fuels.forEach((fuel) => {
+    const option = document.createElement("option");
+    option.value = fuel;
+    option.textContent = fuel;
+    snapshotFuel.append(option);
+  });
+
   seriesMetric.value = "generation";
   seriesCadence.value = "monthly";
   seriesDisplay.value = "value";
@@ -1134,6 +1144,13 @@ const renderSeriesControls = (datasets) => {
     ? "United States"
     : markets[0];
   selectedFuelTypes = new Set([fuels.includes("Coal") ? "Coal" : fuels[0]]);
+  selectedSnapshotFuel =
+    fuels.includes(selectedSnapshotFuel)
+      ? selectedSnapshotFuel
+      : fuels.includes("Coal")
+      ? "Coal"
+      : fuels[0];
+  snapshotFuel.value = selectedSnapshotFuel;
 
   const updateFuelButton = () => {
     seriesFuelButton.textContent = getFuelSelectionLabel(fuels);
@@ -1203,6 +1220,10 @@ const renderSeriesControls = (datasets) => {
   seriesCadence.addEventListener("change", refreshSeries);
   seriesDisplay.addEventListener("change", refreshSeries);
   seriesMarket.addEventListener("change", refreshSeries);
+  snapshotFuel.addEventListener("change", () => {
+    selectedSnapshotFuel = snapshotFuel.value;
+    renderLatestSnapshot(datasets[seriesMetric.value], seriesMetric.value);
+  });
   seriesFuelButton.addEventListener("click", () => {
     const isOpen = !seriesFuelMenu.hidden;
     seriesFuelMenu.hidden = isOpen;
