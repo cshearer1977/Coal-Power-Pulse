@@ -67,14 +67,9 @@ const getYAxisDomain = (values, displayKey) => {
 
   const minValue = Math.min(...finiteValues);
   const maxValue = Math.max(...finiteValues);
-  const boundedMin = Math.min(minValue, 0);
-  const boundedMax = Math.max(maxValue, 0);
-  const range = boundedMax - boundedMin || Math.max(Math.abs(boundedMax), 1);
-  const step = getNiceStep(range / 4);
-  const yMin = Math.floor(boundedMin / step) * step;
-  const yMax = Math.ceil(boundedMax / step) * step;
-
-  return yMin === yMax ? { yMin: yMin - 1, yMax: yMax + 1 } : { yMin, yMax };
+  const maxAbs = Math.max(Math.abs(minValue), Math.abs(maxValue), 1);
+  const step = getNiceStep(maxAbs / 2);
+  return { yMin: -step * 2, yMax: step * 2 };
 };
 
 const formatBucketLabel = (value) =>
@@ -417,7 +412,7 @@ const showSeriesTooltip = ({ row, metric, x, y, periodLabel }) => {
     <div>Period: ${periodLabel ?? formatBucketLabel(row.bucket_start)}</div>
     <div>${metric.label}: ${formatNumber(row[metric.valueKey])} ${metric.unit}</div>
     <div>Share: ${formatPct(row[metric.shareKey])}</div>
-    <div>Change: ${formatDeltaPct(row.change_pct)}</div>
+    <div>YoY Change: ${formatDeltaPct(row.change_pct)}</div>
     <div>Source: Ember API</div>
   `;
 
