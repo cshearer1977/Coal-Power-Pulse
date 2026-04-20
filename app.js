@@ -747,10 +747,10 @@ const renderLatestSnapshot = (payload, metricKey) => {
     tableRow.innerHTML = `
       <td>${row.market}</td>
       <td>${row.fuel_type}</td>
+      <td>${metric.label} (${metric.unit})</td>
       <td>${row.bucket_start.slice(0, 7)}</td>
       <td>${formatNumber(row[metric.valueKey])}</td>
       <td>${formatPct(row[metric.shareKey])}</td>
-      <td>${formatTime(row.observed_at)}</td>
       <td class="${getDeltaClassName(yoyChange)}">${formatDeltaPct(yoyChange)}</td>
       <td class="${getDeltaClassName(latestAnnual?.change_pct ?? null)}" title="${latestAnnual?.period_label ?? ""}">${formatDeltaPct(latestAnnual?.change_pct ?? null)}</td>
     `;
