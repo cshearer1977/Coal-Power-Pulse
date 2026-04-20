@@ -109,11 +109,11 @@ const compareMarkets = (a, b) => {
   return a.localeCompare(b);
 };
 
-const coverageGrid = document.querySelector("#coverage-grid");
 const schemaPreview = document.querySelector("#schema-preview");
 const snapshotBody = document.querySelector("#snapshot-body");
 const snapshotGeneratedAt = document.querySelector("#snapshot-generated-at");
-const coverageGeneratedAt = document.querySelector("#coverage-generated-at");
+const ytdStatsGrid = document.querySelector("#ytd-stats-grid");
+const ytdGeneratedAt = document.querySelector("#ytd-generated-at");
 const seriesMetric = document.querySelector("#series-metric");
 const seriesCadence = document.querySelector("#series-cadence");
 const seriesDisplay = document.querySelector("#series-display");
@@ -333,6 +333,8 @@ const getPriorYearRow = (rows, targetRow) => {
   );
 };
 
+const SAME_CHANGE_EPSILON = 0.05;
+
 const getLatestAnnualChangeByMarketAndFuel = (payload, metricKey) => {
   const result = new Map();
 
@@ -362,6 +364,63 @@ const getLatestAnnualChangeByMarketAndFuel = (payload, metricKey) => {
   });
 
   return result;
+};
+
+const renderYtdStats = (payload) => {
+  if (!ytdStatsGrid) {
+    return;
+  }
+
+  ytdStatsGrid.replaceChildren();
+
+  if (!payload?.generatedAt || !Array.isArray(payload.rows)) {
+    if (ytdGeneratedAt) {
+      ytdGeneratedAt.textContent = "YTD 2026 stats unavailable";
+    }
+    return;
+  }
+
+  if (ytdGeneratedAt) {
+    ytdGeneratedAt.textContent = `YTD 2026 generation stats from Ember export generated ${formatTime(payload.generatedAt)}`;
+  }
+
+  const fuels = (payload.fuelTypes ?? [])
+    .filter((fuel) => fuel !== "Total generation")
+    .sort((a, b) => {
+      const ai = FUEL_ORDER.indexOf(a);
+      const bi = FUEL_ORDER.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
+    });
+  const markets = Array.from(new Set((payload.rows ?? []).map((row) => row.market))).filter((market) => market !== "World");
+
+  fuels.forEach((fuelType) => {
+    const annualRows = markets
+      .map((market) => buildAnnualRows(payload, "generation", market, fuelType).find((row) => row.bucket_start.startsWith("2026-")))
+      .filter(Boolean);
+    const comparableRows = annualRows.filter(
+      (row) => Number.isFinite(row.change_pct) || (Number.isFinite(row.comparison_value) && row.comparison_value !== 0)
+    );
+    const annotatedRows = annotateRowsWithPeriodChange(comparableRows, "generation", "annual").filter((row) =>
+      Number.isFinite(row.change_pct)
+    );
+
+    const increasing = annotatedRows.filter((row) => row.change_pct > SAME_CHANGE_EPSILON);
+    const decreasing = annotatedRows.filter((row) => row.change_pct < -SAME_CHANGE_EPSILON);
+    const unchanged = annotatedRows.filter((row) => Math.abs(row.change_pct) <= SAME_CHANGE_EPSILON);
+    const avg = (rows) =>
+      rows.length ? rows.reduce((sum, row) => sum + row.change_pct, 0) / rows.length : null;
+
+    const card = document.createElement("article");
+    card.className = "coverage-card";
+    card.innerHTML = `
+      <h3>${fuelType}</h3>
+      <div class="meta-line"><strong>Markets with 2026 data:</strong> ${annotatedRows.length}</div>
+      <div class="meta-line"><strong>Increasing use:</strong> ${increasing.length} markets (${formatDeltaPct(avg(increasing))} avg)</div>
+      <div class="meta-line"><strong>Decreasing use:</strong> ${decreasing.length} markets (${formatDeltaPct(avg(decreasing))} avg)</div>
+      <div class="meta-line"><strong>Staying the same:</strong> ${unchanged.length} markets</div>
+    `;
+    ytdStatsGrid.append(card);
+  });
 };
 
 const buildAnnualRowsForFuelSelection = (payload, metricKey, market) =>
@@ -534,39 +593,6 @@ const renderLatestSnapshot = (payload, metricKey) => {
       <td class="${getDeltaClassName(latestAnnual?.change_pct ?? null)}" title="${latestAnnual?.period_label ?? ""}">${formatDeltaPct(latestAnnual?.change_pct ?? null)}</td>
     `;
     snapshotBody.append(tableRow);
-  });
-};
-
-const renderCoverage = (payload) => {
-  coverageGrid.replaceChildren();
-
-  const latestBucketByMarket = Array.isArray(payload?.rows)
-    ? payload.rows.reduce((map, row) => {
-        const existing = map.get(row.market) ?? "";
-        if (row.bucket_start > existing) {
-          map.set(row.market, row.bucket_start);
-        }
-        return map;
-      }, new Map())
-    : new Map();
-
-  if (coverageGeneratedAt) {
-    const count = Number(payload?.marketCount) || (Array.isArray(payload?.markets) ? payload.markets.length : 0);
-    coverageGeneratedAt.textContent = `Ember coverage: ${count} countries and regions`;
-  }
-
-  (payload?.markets ?? []).forEach((market) => {
-    const latestBucket = latestBucketByMarket.get(market.name) ?? "";
-    const latestLabel = latestBucket ? formatBucketLabel(latestBucket) : "latest available month";
-    const article = document.createElement("article");
-    article.className = "coverage-card";
-    article.innerHTML = `
-      <div class="status-pill status-${market.statusClass}">${market.statusLabel}</div>
-      <h3>${market.name}</h3>
-      <div class="meta-line"><strong>Source:</strong> ${market.primarySource}</div>
-      <div class="meta-line"><strong>Coverage:</strong> Monthly series from ${START_YEAR_LABEL} to ${latestLabel}</div>
-    `;
-    coverageGrid.append(article);
   });
 };
 
@@ -1014,7 +1040,7 @@ const renderSeriesControls = (datasets) => {
     hiddenYears = seriesCadence.value === "annual" ? new Set() : getDefaultHiddenYears(filteredRows);
     renderSeriesChart(filteredRows, seriesMetric.value, seriesDisplay.value, seriesCadence.value);
     renderLatestSnapshot(activePayload, seriesMetric.value);
-    renderCoverage(activePayload);
+    renderYtdStats(datasets.generation);
   };
 
   renderFuelMenu();
@@ -1048,7 +1074,7 @@ const load = async () => {
   const emissionsMonthly = await emissionsResponse.json();
 
   schemaPreview.textContent = JSON.stringify(sources.normalizedRecordSchema, null, 2);
-  renderCoverage(generationMonthly);
+  renderYtdStats(generationMonthly);
   renderSeriesControls({
     generation: generationMonthly,
     emissions: emissionsMonthly,
