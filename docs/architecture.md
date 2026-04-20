@@ -48,6 +48,7 @@ The generated datasets in `data/ember-monthly-series.json` and `data/ember-month
 
 1. `scripts/fetch-ember-monthly.mjs` loads `EMBER_API_KEY` from `.env`.
 2. `connectors/ember-monthly.mjs` fetches the supported Ember monthly series in parallel for both datasets.
+   It fetches from `2019-01` onward so 2020 monthly and annual year-over-year calculations have a prior-year baseline, while the UI still displays `2020-01` onward.
 3. The script normalizes the response into two JSON artifacts:
    - `data/ember-monthly-series.json`
    - `data/ember-monthly-emissions-series.json`

@@ -30,7 +30,7 @@ Live dashboard:
 
 ## Refresh the data
 
-The dashboard fetches Ember monthly generation and power sector emissions data from `2020-01` through the latest available month for the supported fuel types, and checks for updates daily.
+The dashboard fetches Ember monthly generation and power sector emissions data from `2019-01` through the latest available month for the supported fuel types, using 2019 only as a hidden baseline so year-over-year changes for 2020 can be calculated while the visible dashboard still starts at `2020-01`.
 
 ```bash
 cd /Users/christines/Desktop/Workspace/Coal-Power-Pulse

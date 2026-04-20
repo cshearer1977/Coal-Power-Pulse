@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  BASELINE_START_DATE,
   DATASET_CONFIG,
   DEFAULT_FUEL_SERIES,
   fetchEmberMonthlyDataset,
@@ -93,7 +94,9 @@ try {
   const fetchedAt = new Date().toISOString();
   const datasets = await Promise.all(
     ["generation", "emissions"].map(async (datasetKey) => {
-      const { startDate, endDate, responses } = await fetchEmberMonthlyDataset(apiKey, datasetKey);
+      const { startDate, endDate, responses } = await fetchEmberMonthlyDataset(apiKey, datasetKey, fetch, {
+        startDate: BASELINE_START_DATE,
+      });
       const redactedResponses = responses.map((response) => ({
         ...response,
         url: redactApiKey(apiKey, response.url),

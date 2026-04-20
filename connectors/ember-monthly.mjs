@@ -9,6 +9,9 @@ export const DEFAULT_FUEL_SERIES = [
   "Total generation",
 ];
 
+export const BASELINE_START_DATE = "2019-01";
+export const DISPLAY_START_DATE = "2020-01";
+
 const BASE_FUEL_SERIES = [
   "Coal",
   "Gas",
@@ -90,7 +93,7 @@ export const fetchEmberMonthlyDataset = async (
   }
 
   const {
-    startDate = "2020-01",
+    startDate = BASELINE_START_DATE,
     endDate = new Date().toISOString().slice(0, 7),
     seriesList = BASE_FUEL_SERIES,
   } = options;

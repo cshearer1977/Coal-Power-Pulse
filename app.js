@@ -143,6 +143,7 @@ const seriesSummary = document.querySelector("#series-summary");
 const seriesChart = document.querySelector("#series-chart");
 const seriesTooltip = document.querySelector("#series-tooltip");
 const START_YEAR_LABEL = "January 2020";
+const DISPLAY_START_YEAR = 2020;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -227,10 +228,18 @@ const getRowYear = (row) => new Date(`${row.bucket_start}T00:00:00Z`).getUTCFull
 const getRowMonthIndex = (row) => new Date(`${row.bucket_start}T00:00:00Z`).getUTCMonth();
 
 const getDefaultHiddenYears = (rows) => {
-  const years = Array.from(new Set(rows.map((row) => getRowYear(row)))).sort((a, b) => a - b);
+  const years = Array.from(new Set(rows.map((row) => getRowYear(row)).filter((year) => year >= DISPLAY_START_YEAR))).sort(
+    (a, b) => a - b
+  );
   const visibleYears = new Set(years.slice(-2));
   return new Set(years.filter((year) => !visibleYears.has(year)));
 };
+
+const filterRowsForDisplay = (rows) =>
+  rows.filter((row) => {
+    const year = Number(row.bucket_start?.slice(0, 4));
+    return Number.isFinite(year) && year >= DISPLAY_START_YEAR;
+  });
 
 const groupMonthlyRowsByYear = (rows) => {
   const grouped = new Map();
@@ -720,7 +729,7 @@ const renderLatestSnapshot = (payload, metricKey) => {
     return;
   }
 
-  const selectedRows = filterRowsByFuelSelection(payload.rows);
+  const selectedRows = filterRowsForDisplay(filterRowsByFuelSelection(payload.rows));
   const latestAnnualChangeByMarketAndFuel = getLatestAnnualChangeByMarketAndFuel(payload, metricKey);
   snapshotGeneratedAt.textContent = `Ember monthly export generated ${formatTime(payload.generatedAt)}`;
   snapshotBody.replaceChildren();
@@ -755,11 +764,12 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
   const isAnnual = cadenceKey === "annual";
   const selectedFuels = getSelectedFuelTypes();
   const hasMultipleFuels = selectedFuels.length > 1;
+  const displayRows = filterRowsForDisplay(rows);
 
   seriesChart.replaceChildren();
   hideSeriesTooltip();
 
-  if (!rows.length) {
+  if (!displayRows.length) {
     renderSeriesLegend([], () => {});
     seriesSummary.hidden = true;
     return;
@@ -771,12 +781,12 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
   const buckets = isAnnual
-    ? Array.from(new Set(rows.map((row) => row.bucket_start.slice(0, 4)))).sort()
+    ? Array.from(new Set(displayRows.map((row) => row.bucket_start.slice(0, 4)))).sort()
     : MONTH_LABELS.map((_, index) => index);
   const bucketIndex = new Map(buckets.map((bucket, index) => [bucket, index]));
-  const byYear = isAnnual ? new Map() : groupMonthlyRowsByYear(rows);
+  const byYear = isAnnual ? new Map() : groupMonthlyRowsByYear(displayRows);
   const visibleYears = Array.from(byYear.keys()).filter((year) => !hiddenYears.has(year));
-  const visibleRows = isAnnual ? rows : rows.filter((row) => visibleYears.includes(getRowYear(row)));
+  const visibleRows = isAnnual ? displayRows : displayRows.filter((row) => visibleYears.includes(getRowYear(row)));
   const values = visibleRows.map((row) => display.valueForRow(row, metric)).filter((value) => Number.isFinite(value));
 
   const toggleYear = (label) => {
@@ -904,7 +914,7 @@ const renderSeriesChart = (rows, metricKey, displayKey, cadenceKey) => {
   if (isAnnual) {
     const byFuel = new Map();
 
-    rows.forEach((row) => {
+    displayRows.forEach((row) => {
       if (!byFuel.has(row.fuel_type)) {
         byFuel.set(row.fuel_type, []);
       }
